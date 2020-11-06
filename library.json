@@ -1,0 +1,23 @@
+{
+  "name": "ed7coyne/gnat",
+  "version": "1.0.0",
+  "description": "MQTT server / broker for microcontrollers.",
+  "keywords": ["mqtt"],
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/ed7coyne/gnat.git"
+  },
+  "authors":
+  {
+    "name": "Ed Coyne",
+    "email": "edwardcoyne@gmail.com"
+  },
+  "license": "MIT",
+  "platforms": "*",
+  "build": {
+    "srcFilter": [
+      "-<*.cpp>"
+    ]
+  }
+}
