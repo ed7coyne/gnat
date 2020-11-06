@@ -21,7 +21,7 @@ USER_DIR = .
 # Flags passed to the preprocessor.
 # Set Google Test's header directory as a system directory, such that
 # the compiler doesn't generate warnings in Google Test headers.
-CPPFLAGS += -isystem $(GTEST_DIR)/include -isystem ../
+CPPFLAGS += -isystem $(GTEST_DIR)/include/ -isystem ../
 
 # Flags passed to the C++ compiler.
 CXXFLAGS += -std=c++17 -g -Wall -Wextra -pthread
@@ -30,7 +30,7 @@ CXXFLAGS += -std=c++17 -g -Wall -Wextra -pthread
 CXXFLAGS += -Wformat=0
 
 # ... After debugging turn this back on.
-CXXFLAGS += -I./include/
+CXXFLAGS += -I./include/gnat
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
