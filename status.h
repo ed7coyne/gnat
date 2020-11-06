@@ -4,6 +4,11 @@
 
 namespace gnat {
 
+template<typename T, typename... Args>
+std::unique_ptr<T> make_unique(Args&&... args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
 class Status {
 public:
     enum class Code {
@@ -17,7 +22,7 @@ public:
 
     //TODO string_view when I can get arduino to support it.
     static Status Failure(std::string message) {
-    	return Status(Code::FAILURE, std::make_unique<std::string>(message.data(), message.length()));
+    	return Status(Code::FAILURE, make_unique<std::string>(message.data(), message.length()));
     }
 
     Status(Code code, std::unique_ptr<std::string> message) 

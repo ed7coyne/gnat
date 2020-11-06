@@ -69,6 +69,9 @@ struct BufferConnection {
     BufferConnection CreateHeapCopy() {
         return BufferConnection(out_buffer_ + out_position_, out_size_ - out_position_); 
     }
+
+    gnat::ConnectionType connection_type() { return type_; }
+    void set_connection_type(gnat::ConnectionType type) { type_ = type; }
     
     uint8_t* out_buffer_;
     const size_t out_size_;
@@ -77,6 +80,8 @@ struct BufferConnection {
     constexpr static const size_t kInBufferSize = 1024;
     uint8_t in_buffer_[kInBufferSize];
     size_t in_position_ = 0;
+
+    gnat::ConnectionType type_ = gnat::ConnectionType::UNKNOWN;
 };
 
 }  // namespace
@@ -98,16 +103,16 @@ TEST(ServerTest, ConnectPacket) {
 
     auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
     ASSERT_EQ(packet.type(), gnat::PacketType::CONNECT); 
-    ASSERT_EQ(packet.remaining_bytes(), 31); 
+    ASSERT_EQ(packet.bytes_remaining(), 31); 
 
-    auto header_opt = packet.ReadConnectHeader();
+    const auto header_opt = gnat::proto3::Connect::ReadFrom(&packet);
     ASSERT_TRUE(header_opt.has_value());
 
     auto header = *header_opt;
-    EXPECT_EQ(6, header.protocol_name_length);
+    EXPECT_EQ(6, header.protocol_name.length);
     EXPECT_EQ(std::string("MQIsdp"),
-              std::string(header.protocol_name, header.protocol_name_length));
-    EXPECT_EQ(3, header.protocol_version);
+              std::string(header.protocol_name.data, header.protocol_name.length));
+    EXPECT_EQ(3, header.protocol_level);
 }
 
 TEST(ServerTest, ConnectPacketHandling) {
@@ -126,6 +131,8 @@ TEST(ServerTest, ConnectPacketHandling) {
 
     auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
     ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&packet));
+
+    EXPECT_EQ(((BufferConnection*)(packet.connection()))->type_, gnat::ConnectionType::MQTT_31);
 }
 
 TEST(ServerTest, PublishPacket) {
@@ -142,15 +149,15 @@ TEST(ServerTest, PublishPacket) {
 
     auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
     ASSERT_EQ(packet.type(), gnat::PacketType::PUBLISH); 
-    ASSERT_EQ(packet.remaining_bytes(), 12); 
+    ASSERT_EQ(packet.bytes_remaining(), 12); 
 
-    auto header_opt = packet.ReadPublish();
+    const auto header_opt = gnat::proto3::Publish::ReadFrom(&packet, packet.type_flags());
     ASSERT_TRUE(header_opt.has_value());
 
     auto& header = *header_opt;
 
-    EXPECT_EQ(std::string(header.topic, header.topic_length), "t/test");
-    EXPECT_EQ(4, header.payload_size);
+    EXPECT_EQ(std::string(header.topic.data, header.topic.length), "t/test");
+    EXPECT_EQ(4, header.payload_bytes);
 }
 
 TEST(ServerTest, PublishPacketHandling) {

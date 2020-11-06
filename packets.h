@@ -11,49 +11,227 @@ namespace std {
   using nonstd::optional;
 }
 
-
 namespace gnat {
 
+// These are laid out in the MQTT spec.
 enum class PacketType {
-        RESERVED,
-        CONNECT,
-        CONNACK,
-        PUBLISH,
-        PUBACK,
-        PUBREC,
-        PUBREL,
-        PUBCOMP,
-        SUBSCRIBE,
-        SUBACK,
-        UNSUBSCRIBE,
-        UNSUBACK,
-        PINGREQ,
-        PINGRESP,
-        DISCONNECT,
-        AUTH
+    RESERVED,
+    CONNECT,
+    CONNACK,
+    PUBLISH,
+    PUBACK,
+    PUBREC,
+    PUBREL,
+    PUBCOMP,
+    SUBSCRIBE,
+    SUBACK,
+    UNSUBSCRIBE,
+    UNSUBACK,
+    PINGREQ,
+    PINGRESP,
+    DISCONNECT,
+    AUTH
 };
 
-struct ConnectHeader {
-  char protocol_name[6] = {0};
-  uint8_t protocol_name_length = 0;
 
-  uint8_t protocol_version;
+enum FieldType {
+  TYPE_VARIABLE,
+  TYPE_STRING,
+  TYPE_BYTES,
+};
 
-  // We don't support any features in the flags currently.
-  uint8_t protocol_flags;
+template<uint16_t byte_count_t, uint8_t type_t = TYPE_BYTES>
+struct PacketField {
+    static constexpr uint16_t byte_count = byte_count_t;
+    static constexpr uint8_t type = type_t;
+};
+
+template<size_t Size>
+struct StringBuffer {
+    static constexpr size_t kSize = Size;
+    char data[Size] = {0};
+    uint16_t length = 0;
+};
+    
+namespace {
+
+template<typename T, typename Client>
+static bool ReadVariableByteInteger(T* out, Client* client) {
+    int multiplier = 1;
+    *out = 0;
+    while (true) {
+      uint8_t next_byte = 0;
+      if (!client->ReadAll(&next_byte, 1)) {
+          return false;
+      }
+
+      *out += (next_byte & 127) * multiplier;
+
+      multiplier *= 128;
+
+      if (!(next_byte & 128)) 
+        return true;
+    }
+}
+
+template<typename T, typename Client>
+static bool ReadString(T* out, Client* client) {
+    uint8_t length_raw[2];
+    if (!client->ReadAll(length_raw, 2)) return false;
+
+    out->length = (length_raw[0] << 8) | length_raw[1];
+    LOG("%lu\n", out->length);
+    if (out->length > T::kSize) {
+        LOG("String too long for buffer!\n");
+        return false;
+    }
+
+   return client->ReadAll((uint8_t*)out->data, out->length);
+}
+
+//TODO: In some glorious world where we could run C++17 this would be a if constexpr
+// block and way cleaner.
+template<typename Field, uint8_t type>
+struct TypedReadField;
+
+template<typename Field>
+struct TypedReadField<Field, TYPE_BYTES> {
+template<typename T, typename Client>
+static bool Read(Client* client, T* out) {
+  static_assert(sizeof(*out) >= Field::byte_count, "");
+  return client->ReadAll((uint8_t*)out, Field::byte_count);
+}
+};
+
+template<typename Field>
+struct TypedReadField<Field, TYPE_STRING> {
+template<typename T, typename Client>
+static bool Read(Client* client, T* out) {
+  return ReadString(out, client);
+}
+};
+
+template<typename Field>
+struct TypedReadField<Field, TYPE_VARIABLE> {
+template<typename T, typename Client>
+static bool Read(Client* client, T* out) {
+  return ReadVariableByteInteger(out, client);
+}
+};
+
+template<typename Field, typename T, typename Client>
+static bool ReadField(Client* client, T* out) {
+  return TypedReadField<Field, Field::type>::Read(client, out);
+}
+
+}  // namespace
+
+// Header common to all MQTT packets.
+struct FixedHeader {
+    using Control = PacketField<1>;
+    using RemainingSize = PacketField<0, TYPE_VARIABLE>;
+
+    template<typename Client>
+    static std::optional<FixedHeader> ReadFrom(Client* client) {
+        FixedHeader out;
+        if (!ReadField<Control>(client, &out.control)) {
+            DEBUG_LOG("Failed to read control.\n");
+            return {};
+        }
+
+        if (!ReadField<RemainingSize>(client, &out.remaining_size)) {
+            DEBUG_LOG("Failed to read size.\n");
+            return {};
+        }
+        return out;
+    }
+
+    uint8_t control = 0;
+    uint32_t remaining_size = 0; 
+};
+
+// Packets for MQTT <= 3.1.1 
+// Things changed dramatically for MQTT 5.
+namespace proto3 {
+
+struct Connect {
+  using Name = PacketField<0, TYPE_STRING>;
+  using ProtocolLevel = PacketField<1>;
+  using ConnectFlags = PacketField<1>;
+  using KeepAlive = PacketField<2>;
+
+  template<typename Client>
+  static std::optional<Connect> ReadFrom(Client* client) {
+    Connect out;
+    if (!ReadField<Name>(client, &out.protocol_name)) {
+      DEBUG_LOG("Failed to read protocol name.\n");
+      return {};
+    }
+
+    if (!ReadField<ProtocolLevel>(client, &out.protocol_level)) {
+      DEBUG_LOG("Failed to read protocol level.\n");
+      return {};
+    }
+    
+    if (!ReadField<ConnectFlags>(client, &out.flags)) {
+      DEBUG_LOG("Failed to read flags.\n");
+      return {};
+    }
+
+    if (!ReadField<KeepAlive>(client, &out.keep_alive)) {
+      DEBUG_LOG("Failed to read flags.\n");
+      return {};
+    }
+
+    return out;
+  }
+
+  template<typename Client>
+  bool SendOn(Client* client) const {
+    static uint8_t buffer[128] = {0};
+    uint8_t current_byte = 0;
+    buffer[current_byte++] = (((uint8_t)PacketType::CONNECT << 4) & 0xF0);
+
+    // We will come back to set the length last, it will be one byte though.
+    uint8_t* remaining_length = &buffer[current_byte++];
+    
+    // Write protocol_name.
+    buffer[current_byte++] = 0;
+    buffer[current_byte++] = protocol_name.length;
+    memcpy(buffer + current_byte, protocol_name.data, protocol_name.length);
+    current_byte += protocol_name.length;
+
+    buffer[current_byte++] = protocol_level;
+    buffer[current_byte++] = flags;
+
+    buffer[current_byte++] = keep_alive >> 8;
+    buffer[current_byte++] = keep_alive & 0xFF;
+
+    *remaining_length = current_byte - 2; // remove common header bytes.
+    return client->WriteAll(buffer, current_byte);
+  }
+   
+  StringBuffer<6> protocol_name;
+  uint8_t protocol_level;
+  uint8_t flags;
+  uint16_t keep_alive;
+};
+
+// Connect for generic mqtt 3 session.
+static constexpr Connect kDefaultConnect{
+  .protocol_name = {"MQTT", 4},
+  .protocol_level = 4,
+  .flags = 0,
+  .keep_alive = 0,
 };
 
 struct ConnectAck {
-  bool error = false;
-
-  // Set a reasonable max, we currently aren't hard limited to this anywhere.
-  constexpr static uint32_t kMaxPacketSize = 1024;
-
-  template<typename ClientConnection>
-  bool SendOn(ClientConnection* connection) {
+  template<typename Client>
+  bool SendOn(Client* client) {
     static uint8_t buffer[128] = {0};
     uint8_t current_byte = 0;
     buffer[current_byte++] = ((uint8_t)PacketType::CONNACK << 4) & 0xF0;
+
     // We will come back to set the length last, it will be one byte though.
     uint8_t* remaining_length = &buffer[current_byte++];
 
@@ -61,79 +239,52 @@ struct ConnectAck {
     // We don't support sessions though.
     buffer[current_byte++] = 0;
 
-    // If it's and error we just send the generic error.
+    // If it's an error we just send the generic error.
     buffer[current_byte++] = (error) ? 0x80 : 0;
-    
-    const auto header_size = current_byte; 
-    uint8_t* props_length = &buffer[current_byte++];
-
-    // Max QoS of 0 (for now).
-    buffer[current_byte++] = 0x24;
-    buffer[current_byte++] = 0;
-    
-    // We support retain.
-    buffer[current_byte++] = 0x25;
-    buffer[current_byte++] = 1;
-    
-    // We don't support subscription ids.
-    buffer[current_byte++] = 0x29;
-    buffer[current_byte++] = 0;
-    
-    // We don't support shared subscriptions.
-    buffer[current_byte++] = 0x2A;
-    buffer[current_byte++] = 0;
-    
-    // Max packet size.
-    buffer[current_byte++] = 0x27;
-    buffer[current_byte++] = *(uint8_t*)&kMaxPacketSize;
-    buffer[current_byte++] = *((uint8_t*)&kMaxPacketSize + 1);
-    buffer[current_byte++] = *((uint8_t*)&kMaxPacketSize + 2);
-    buffer[current_byte++] = *((uint8_t*)&kMaxPacketSize + 3);
-
-    // Assigned ClientId.
-    buffer[current_byte++] = 0x12;
-    buffer[current_byte++] = 0;
-    buffer[current_byte++] = 3;
-    buffer[current_byte++] = 'c';
-    buffer[current_byte++] = 'i';
-    buffer[current_byte++] = 'd';
-
-    const uint8_t packet_size = current_byte - 1;
+    const uint8_t packet_size = current_byte;
     *remaining_length = packet_size - 2; // remove bytes for type and length.
-    *props_length = packet_size - header_size - 1;
-    LOG("Sending Ack: size: %u, remaining: %u, props_length: %u\n",
-      packet_size, *remaining_length, *props_length);
+    //*props_length = packet_size - header_size - 1;
+    LOG("Sending Ack: size: %u, remaining: %u\n",
+      packet_size, *remaining_length);
 
-    return connection->WriteAll(buffer, packet_size);
+    return client->WriteAll(buffer, packet_size);
   }
+
+  bool error = false;
 };
 
 struct Publish {
-  uint8_t flags = 0;
-  char topic[8];
-  uint8_t topic_length = 0;
+  using Topic = PacketField<0, TYPE_STRING>;
+  using PacketId = PacketField<2>;
 
-  uint32_t timestamp = 0;
+  template<typename Client>
+  static std::optional<Publish> ReadFrom(Client* client, uint8_t flags) {
+    Publish out;
+    if (!ReadField<Topic>(client, &out.topic)) {
+      DEBUG_LOG("Failed to read topic.\n");
+      return {};
+    }
 
-  uint8_t* payload = nullptr;
-  uint16_t  payload_size = 0;
+    if (((flags >> 1) & 0b11) != 0) {
+      // We currently don't support QoS and ignore this, we need to 
+      // read it to ensure the payload size is right.
+      uint16_t id = 0;
+      if (!ReadField<PacketId>(client, &id)) {
+        DEBUG_LOG("Failed to read packet id.\n");
+        return {};
+      }
+    }
 
-  bool flag_retain() {
-    return (flags & 0b1) != 0;
-  }
+    out.payload_bytes = client->bytes_remaining();
 
-  uint8_t flag_qos_level() {
-    return ((flags >> 1) & 0b11);
-  }
-  
-  bool flag_dup() {
-    return (flags & 0b100) != 0;
+    return out;
   }
 
   template<typename ClientConnection>
-  bool SendOn(ClientConnection* connection) {
+  bool SendOn(ClientConnection* connection, uint8_t* payload) {
     static uint8_t buffer[48] = {0};
     uint8_t current_byte = 0;
+    constexpr uint8_t flags = 0; // We can expand functionality here.
     buffer[current_byte++] = 
         (((uint8_t)PacketType::PUBLISH << 4) & 0xF0) | (flags & 0xF);
     
@@ -141,52 +292,67 @@ struct Publish {
     auto* packet_length = &buffer[current_byte++];
 
     buffer[current_byte++] = 0;
-    buffer[current_byte++] = topic_length;
-    memcpy(buffer + current_byte, topic, topic_length);
-    current_byte += topic_length;
+    buffer[current_byte++] = topic.length;
+    memcpy(buffer + current_byte, topic.data, topic.length);
+    current_byte += topic.length;
     
-    auto* props_length = &buffer[current_byte++];
+    buffer[current_byte++] = 0; // props_length
     const auto header_size = current_byte; 
 
-/*
-    // We use userproprty to carry ourtimestamp.
-    buffer[current_byte++] = 0x26;
-    // empty key.
-    buffer[current_byte++] = 0;
-    buffer[current_byte++] = 0;
-    // 4 byte value.
-    buffer[current_byte++] = 0;
-    buffer[current_byte++] = 4;
-    *props_length = (current_byte - 1) - header_size;
-  */
-    props_length = 0;
-
-/*
-    // Put timestamp as first four bytes of payload.
-    static_assert(sizeof(timestamp) == 4, "");
-    memcpy(buffer + current_byte, &timestamp, 4);
-    current_byte += 4;
-*/
-    const auto packet_size = header_size + payload_size;
+    const auto packet_size = header_size + payload_bytes;
     *packet_length = packet_size - 2; // remove fixed header from size.
     
 //    DEBUG_LOG("Writing Publish, size: %u\n", packet_size);
 //    LogHex(payload, payload_size);
 
-    //// Write buffered data.
+    // Write buffered data.
     if (!connection->WriteAll(buffer, header_size)) return false;
     // Write payload.
-    return connection->WriteAll(payload, payload_size);
- }
+    return connection->WriteAll(payload, payload_bytes);
+  }
 
+  StringBuffer<128> topic;
+  uint32_t payload_bytes = 0;
 };
 
 struct Subscribe {
-  uint16_t packet_id;  
-  std::vector<uint64_t> topics;
+    using PacketId = PacketField<2>;
+    using Topic = PacketField<0, TYPE_STRING>;
+    using Flags = PacketField<1>;
+
+    template<typename Client, typename TopicCallback>
+    static std::optional<Subscribe> ReadFrom(Client* client, TopicCallback&& callback) {
+        Subscribe out;
+
+        uint16_t id = 0;
+        if (!ReadField<PacketId>(client, &id)) {
+            DEBUG_LOG("Failed to read packet id.\n");
+            return {};
+        }
+
+        StringBuffer<128> topic;
+        while (client->bytes_remaining() > 0) {
+            if (!ReadField<Topic>(client, &topic)) {
+                DEBUG_LOG("Failed to read topic.\n");
+                return {};
+            }
+            if (!callback(&topic)) {
+                return {};
+            }
+
+            // These are reserved in MQTT 3.1.1, ignore it.
+            uint8_t flags;
+            if (!ReadField<Flags>(client, &flags)) {
+                DEBUG_LOG("Failed to read flags.\n");
+                return {};
+            }
+        }
+
+        return out;
+    }
 };
 
-struct SubAck {
+struct SubscribeAck {
   uint8_t responses[32] = {0};
   uint8_t responses_count = 0;
 
@@ -212,7 +378,6 @@ struct SubAck {
   }
 };
 
-
 struct PingResp {
   template<typename ClientConnection>
   static bool SendOn(ClientConnection* connection) {
@@ -224,43 +389,40 @@ struct PingResp {
   }
 };
 
+}  // namespace proto3
+
+// Represents a raw packet steaming from the connection, manages it's bytes left and ensure that all bytes are read.
 template<typename ClientConnection>
 class Packet {
 public:
-
     static std::optional<Packet> ReadNext(ClientConnection connection) {
         DEBUG_LOG("Reading.\n");
-        uint8_t control = 0;
-        if (!connection.ReadAll(&control, 1)) {
-            DEBUG_LOG("Failed to read control.\n");
+        const auto header = FixedHeader::ReadFrom(&connection);
+        if (!header) {
             return {};
         }
-        size_t remaining_size = 0;
-        if (!ReadVariableByteInteger(&remaining_size, &connection)) {
-            DEBUG_LOG("Failed to read size.\n");
-            return {};
-        }
-        return Packet(control, remaining_size, std::move(connection));
+
+        return Packet(header->control, header->remaining_size, std::move(connection));
     }
 
-  Packet(uint8_t control, size_t remaining_bytes, ClientConnection connection) 
-      : control_(control), remaining_bytes_(remaining_bytes), connection_(std::move(connection)) {
-    DEBUG_LOG("New packet, size: %u\n", (uint32_t)remaining_bytes);
+  Packet(uint8_t control, size_t bytes_remaining, ClientConnection connection) 
+      : control_(control), bytes_remaining_(bytes_remaining), connection_(std::move(connection)) {
+    DEBUG_LOG("New packet, size: %u\n", (uint32_t)bytes_remaining);
   }
 
   Packet(Packet&& from) 
     : control_(from.control_),
-      remaining_bytes_(from.remaining_bytes_),
+      bytes_remaining_(from.bytes_remaining_),
       connection_(std::move(from.connection_)) {
-    from.remaining_bytes_ = 0;
+    from.bytes_remaining_ = 0;
   }
 
   ~Packet() {
     // If the packet is destructed make sure we read all of our data from the 
     // connection so it is clean for the next packet.
-    if (remaining_bytes_ > 0) {
-      DEBUG_LOG("Packet destructed with %d bytes, draining.\n", remaining_bytes_);
-      if(!connection_.Drain(remaining_bytes_)) {
+    if (bytes_remaining_ > 0) {
+      DEBUG_LOG("Packet destructed with %d bytes, draining.\n", bytes_remaining_);
+      if(!connection_.Drain(bytes_remaining_)) {
         LOG("drain on dtor fail\n");
       }
     }
@@ -270,8 +432,8 @@ public:
     return static_cast<PacketType>(control_ >> 4);
   }
 
-  uint8_t remaining_bytes() {
-    return remaining_bytes_;
+  uint32_t bytes_remaining() {
+    return bytes_remaining_;
   }
 
   uint8_t type_flags() {
@@ -282,94 +444,9 @@ public:
     return &connection_;
   }
 
-  std::optional<ConnectHeader> ReadConnectHeader() {
-    DEBUG_LOG("Reading connect header.\n");
-
-    ConnectHeader out;
-    uint8_t length[2];
-    if (!ReadAll(length, 2)) return {};
-
-    if (length[0] != 0 || length[1] > 6) {
-      DEBUG_LOG("Protocol name is longer than any that we support. bytes: %X %X\n", length[0], length[1]);
-      return {};
-    }
-    out.protocol_name_length = length[1];
-
-    if (!ReadAll((uint8_t*)out.protocol_name, out.protocol_name_length)) return {};
-    if (!ReadAll(&out.protocol_version, 1)) return {};
-    if (!ReadAll(&out.protocol_flags, 1)) return {};
-
-    // We will read and discard the keep-alive since we don't support it.
-    if (!ReadAll(length, 2)) return {};
-
-    uint16_t property_bytes = 0;
-    if (!ReadVariableByteInteger(&property_bytes)) return {};
-    return out;
-  }
-
-  std::optional<Publish> ReadPublish() {
-    DEBUG_LOG("Reading publish. Flags: %X\n", type_flags());
-
-    Publish out;
-
-    uint8_t length[2];
-    if (!ReadAll(length, 2)) return {};
-
-    if (length[0] != 0 || length[1] > 8) {
-      DEBUG_LOG("Topic is longer than any that we support. bytes: %X %X\n", length[0], length[1]);
-      return {};
-    }
-    out.topic_length = length[1];
-
-    if (!ReadAll((uint8_t*)out.topic, out.topic_length)) return {};
-    DEBUG_LOG("topic: %s (%d)\n", 
-        std::string(out.topic, out.topic_length).c_str(), out.topic_length);
-   
-
-    out.payload_size = remaining_bytes_;
-
-    return out;
-  }
-
-  std::optional<Subscribe> ReadSubscribe() {
-    DEBUG_LOG("Reading subscribe.\n");
-   
-    Subscribe out;
-
-    if (!ReadAll((uint8_t*)&out.packet_id, 2)) return {};
-    
-    // We don't support any properties here, just drain them.
-    uint16_t property_bytes = 0;
-    if (!ReadVariableByteInteger(&property_bytes)) return {};
-    
-    if (!Drain(property_bytes)) return {};
-
-    while (remaining_bytes_ > 0) {
-      // read subscription topic.
-      uint8_t topic_bytes[2];
-      if (!ReadAll(topic_bytes, 2)) return {};
-
-      if (topic_bytes[0] != 0 || topic_bytes[1] > 8) {
-        LOG("Topic too long: %x\n", topic_bytes);
-        return {};
-      }
-
-      uint64_t topic = 0;
-      if (!ReadAll((uint8_t*)&topic, topic_bytes[1])) return {};
-      topic = key::EncodeString((char*)&topic, topic_bytes[1]);
-
-      out.topics.emplace_back(std::move(topic));
-
-      // read subscriptions options. We don't support any so drop it.
-      if(!Drain(1)) return {};
-    }
-
-    return out;
-  }
-
   void Dump() {
     static uint8_t buffer[1024];
-    size_t to_read = remaining_bytes_;
+    size_t to_read = bytes_remaining_;
     ReadAll(buffer, to_read);
 
     LOG("--\n");
@@ -379,72 +456,32 @@ public:
     LOG("--\n");
   }
 
-  // Wraps the connection but tracks read bytes.
   bool ReadAll(uint8_t* buffer, size_t size) {
-    assert(size <= remaining_bytes_);
+    assert(size <= bytes_remaining_);
     if (connection_.ReadAll(buffer, size)) {
-      remaining_bytes_ -= size;
+      bytes_remaining_ -= size;
       return true;
     }
     return false;
   }
 
   bool Drain(size_t size) {
-    if (size > remaining_bytes_) {
-      LOG("Failed to read %u bytes, only %u left\n", size, remaining_bytes_);
+    if (size > bytes_remaining_) {
+      LOG("Failed to read %u bytes, only %u left\n", size, bytes_remaining_);
       return false;
     }
 
     if (connection_.Drain(size)) {
-      remaining_bytes_ -= size;
+      bytes_remaining_ -= size;
       return true;
     }
     return false;
   }
 
-  template<typename T>
-  bool ReadVariableByteInteger(T* out) {
-    uint8_t next_byte = 0;
-    *out = 0;
-    while(true) {
-        if (!ReadAll(&next_byte, 1)) {
-            return false;
-        }
-        *out |= next_byte & 127;
-
-        if ((next_byte & 128) == 0) {
-            break;
-        } else {
-            *out = (*out << 7) & 0xFFFFFF00;
-        }
-    }
-    return true;
-  }
-
-  template<typename T>
-  static bool ReadVariableByteInteger(T* out, ClientConnection* connection) {
-    uint8_t next_byte = 0;
-    *out = 0;
-    while(true) {
-        if (!connection->ReadAll(&next_byte, 1)) {
-            return false;
-        }
-        *out |= next_byte & 127;
-
-        if ((next_byte & 128) == 0) {
-            break;
-        } else {
-            *out = (*out << 7) & 0xFFFFFF00;
-        }
-    }
-    return true;
-  }
-
 private:
   const uint8_t control_;
-  uint8_t remaining_bytes_ = 0;
+  uint32_t bytes_remaining_ = 0;
   ClientConnection connection_;
-
 };
 
 }  //namespace gnat

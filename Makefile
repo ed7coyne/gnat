@@ -1,6 +1,5 @@
-# A sample Makefile for building Google Test and using it in user
-# tests.  Please tweak it to suit your environment and project.  You
-# may want to move it to your project's root directory.
+# This builds tests for the gnat mqtt server, the server itself is a 
+# header library and doesn't require a build artifact.
 #
 # SYNOPSIS:
 #
@@ -14,7 +13,7 @@
 
 # Points to the root of Google Test, relative to where this file is.
 # Remember to tweak this if you move this file.
-GTEST_DIR = ../../third_party/gtest/googletest
+GTEST_DIR = third_party/googletest/googletest
 
 # Where to find user code.
 USER_DIR = .
@@ -47,6 +46,9 @@ all : $(TESTS)
 
 clean :
 	rm -f $(TESTS) gtest.a gtest_main.a *.o
+
+clean_tests:
+	rm -f $(TESTS) *_test.o
 
 # Builds gtest.a and gtest_main.a.
 

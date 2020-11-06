@@ -3,16 +3,14 @@
 
 #pragma once
 
-#include "WiFi.h"
-#include "Arduino.h"
-
-#include "utility.h"
-
 #include <memory>
+
+#include "server.h"
 
 // Enables debug messages in gnat-arduino.
 //#define ARDUINO_DEBUG 1
-#include <gnat-arduino.h>
+
+#ifdef ARDUINO
 
 namespace arduino {
 
@@ -62,6 +60,7 @@ public:
       if (!ReadAll(buffer, to_drain)) return false;
       bytes -= to_drain; 
     }
+    return true;
   }
   
   bool WriteAll(uint8_t* buffer, size_t bytes) {
@@ -74,17 +73,23 @@ public:
       buffer += written;
       bytes -= written;
     }
-    client_->flush();
+    //client_->flush();
     return true;
   }
 
   void Close() {
     client_->stop();
   }
+
+  gnat::ConnectionType connection_type() { return connection_type_; }
+  void set_connection_type(gnat::ConnectionType type) { connection_type_ = type; }
   
 private:
   WiFiClient* client_;
   std::shared_ptr<WiFiClient> owned_client_;
+  gnat::ConnectionType connection_type_ = gnat::ConnectionType::UNKNOWN;
 };
 
 } // namespace arduino
+
+#endif // ARDUINO

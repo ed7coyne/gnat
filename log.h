@@ -7,7 +7,7 @@
 
 static constexpr size_t kBufferSize = 128;
 static char log_buffer[kBufferSize];
-void serial_printf(char* format, ...) {
+void serial_printf(const char* format, ...) {
   va_list args;
   va_start (args, format);
 

@@ -4,6 +4,8 @@
 #include <cstring>
 #include <array>
 
+#undef min
+
 namespace gnat {
 
 namespace key {
