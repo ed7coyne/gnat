@@ -96,3 +96,6 @@ key_test.o : $(USER_DIR)/src/key_test.cpp $(GTEST_HEADERS)
 
 key_test : key_test.o gtest_main.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpthread $^ -o $@
+
+check: $(TESTS)
+	for test in $(TESTS); do ./$$test; done;
