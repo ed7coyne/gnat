@@ -18,18 +18,19 @@ GTEST_DIR = third_party/googletest/googletest
 # Where to find user code.
 USER_DIR = .
 
-NANOPB_DIR = ../../third_party/nanopb
-
 # Flags passed to the preprocessor.
 # Set Google Test's header directory as a system directory, such that
 # the compiler doesn't generate warnings in Google Test headers.
-CPPFLAGS += -isystem $(GTEST_DIR)/include -isystem ../ -I$(NANOPB_DIR)
+CPPFLAGS += -isystem $(GTEST_DIR)/include -isystem ../
 
 # Flags passed to the C++ compiler.
 CXXFLAGS += -std=c++17 -g -Wall -Wextra -pthread
 
 # ... After debugging turn this back on.
 CXXFLAGS += -Wformat=0
+
+# ... After debugging turn this back on.
+CXXFLAGS += -I./include/
 
 # All tests produced by this Makefile.  Remember to add new tests you
 # created to the list.
@@ -78,23 +79,20 @@ gtest_main.a : gtest-all.o gtest_main.o
 # gtest_main.a, depending on whether it defines its own main()
 # function.
 
-server_test.o : $(USER_DIR)/server_test.cpp \
-                     $(USER_DIR)/key.h $(USER_DIR)/datastore.h $(GTEST_HEADERS)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/server_test.cpp
+server_test.o : $(USER_DIR)/src/server_test.cpp $(GTEST_HEADERS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/src/server_test.cpp
 
 server_test : server_test.o gtest_main.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpthread $^ -o $@
 
-datastore_test.o : $(USER_DIR)/datastore_test.cpp \
-                     $(USER_DIR)/key.h $(USER_DIR)/datastore.h $(GTEST_HEADERS)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/datastore_test.cpp
+datastore_test.o : $(USER_DIR)/src/datastore_test.cpp $(GTEST_HEADERS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/src/datastore_test.cpp
 
 datastore_test : datastore_test.o gtest_main.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpthread $^ -o $@
 
-key_test.o : $(USER_DIR)/key_test.cpp \
-                     $(USER_DIR)/key.h $(GTEST_HEADERS)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/key_test.cpp
+key_test.o : $(USER_DIR)/src/key_test.cpp $(GTEST_HEADERS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $(USER_DIR)/src/key_test.cpp
 
 key_test : key_test.o gtest_main.a
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -lpthread $^ -o $@
