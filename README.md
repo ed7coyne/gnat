@@ -1,5 +1,7 @@
-# gnat
 [![Build][ot-gh-action-build-svg]][ot-gh-action-build]
+---
+
+# gnat
 
 This is a MQTT serveri / broker designed for use on microcontrollers. It is optimized for high throughput with little memory allocation or overhead.
 
