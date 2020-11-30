@@ -1,7 +1,7 @@
-[![Build][ot-gh-action-build-svg]][ot-gh-action-build]
----
-
 # gnat
+
+![Build](https://github.com/ed7coyne/gnat/workflows/C/C++%20CI/badge.svg)
+
 
 This is a MQTT serveri / broker designed for use on microcontrollers. It is optimized for high throughput with little memory allocation or overhead.
 
