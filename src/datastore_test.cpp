@@ -14,7 +14,7 @@ DataStore::Entry ToEntry(const char* value) {
     out.length = strlen(value);
     out.data = std::make_unique<uint8_t[]>(out.length);
     memcpy(out.data.get(), value, out.length);
-    return std::move(out);
+    return out;
 }
 
 }
@@ -49,7 +49,7 @@ TEST(DataStoreTest, Notify) {
     ASSERT_NE(0, notified_data.size());
 
     const std::string notified_string(notified_data.data(), notified_data.size());
-    ASSERT_TRUE(value == notified_string) 
+    ASSERT_TRUE(value == notified_string)
         << "notified_data: " << notified_string << "\n";
 }
 
