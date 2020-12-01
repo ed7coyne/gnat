@@ -78,19 +78,20 @@ public:
         }
         DEBUG_LOG("Read publish.");
         //LogHex(entry.data.get(), entry.length);
-        const uint64_t key = key::EncodeString(publish.topic.data, publish.topic.length);
+        const auto key = DataStore::EncodeKey(publish.topic.data, publish.topic.length);
         data_->Set(key, std::move(entry));
       } else if (packet->type() == PacketType::SUBSCRIBE) {
         auto topic_callback = [&](auto* topic) {
             auto connection_heap = packet->connection()->CreateHeapCopy();
-            const uint64_t target_key = key::EncodeString(topic->data, topic->length);
+            const typename DataStore::Key target_key = DataStore::EncodeKey(topic->data, topic->length);
 
             data_->AddObserver(
-                [target_key, conn = std::move(connection_heap)](uint64_t key, const DataStoreEntry& entry) mutable {
+                [&target_key, conn = std::move(connection_heap)]
+                (typename DataStore::Key key, const DataStoreEntry& entry) mutable {
                   if (target_key == key) {
                     LOG("Writing to client!\n");
                     proto3::Publish packet;
-                    key::DecodeString(key, packet.topic.data, (uint8_t*)&packet.topic.length);
+                    DataStore::DecodeKey(key, packet.topic.data, &packet.topic.length);
                     packet.payload_bytes = entry.length;
                     if (!packet.SendOn<ClientConnection>(&conn, entry.data.get())) {
                       return false;

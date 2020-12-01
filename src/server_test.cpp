@@ -176,6 +176,24 @@ TEST(ServerTest, PublishPacketHandling) {
     ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&packet));
 }
 
+TEST(ServerTest, PublishPacketStringKeyHandling) {
+    constexpr static uint8_t kData[] = {
+      0x30, 0xC, 0x0, 0x6, 0x74, 0x2F, 0x74, 0x65, 0x73,
+      0x74, 0x74, 0x65, 0x73, 0x74
+    };
+
+    FakeClock clock;
+    gnat::DataStore<std::string> data;
+    gnat::Server<BufferConnection, gnat::DataStore<std::string>, FakeClock> server(&data, &clock);
+
+    BufferConnection connection((uint8_t*)kData, sizeof(kData));
+
+    auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
+    ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&packet));
+}
+
+
+//TODO Add subscribe/publish/receive test!
 
 /*
 TEST(ServerTest, IntakeExhaust) {

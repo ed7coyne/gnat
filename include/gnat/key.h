@@ -38,7 +38,7 @@ std::string Decode(uint64_t encoded) {
 }
 
 // decode_to should be atleast 8 bytes;
-void DecodeString(uint64_t encoded, char* decode_to, uint8_t* decoded_size) {
+void DecodeString(uint64_t encoded, char* decode_to, uint16_t* decoded_size) {
     char* encoded_str = reinterpret_cast<char*>(&encoded);
     *decoded_size = std::min((size_t)8, strlen(encoded_str));
     memcpy(decode_to, encoded_str, *decoded_size);
