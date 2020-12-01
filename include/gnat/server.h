@@ -27,6 +27,8 @@ enum class ConnectionType {
  *
  * Clock should provide:
  * uint32_t timestamp();
+ *
+ * DataStore should be a gnat::DataStore with template parameters.
 */
 
 template<typename ClientConnection, typename DataStore, typename Clock>
@@ -77,13 +79,12 @@ public:
           return Status::Failure("Unable to complete read.");
         }
         DEBUG_LOG("Read publish.");
-        //LogHex(entry.data.get(), entry.length);
         const auto key = DataStore::EncodeKey(publish.topic.data, publish.topic.length);
         data_->Set(key, std::move(entry));
       } else if (packet->type() == PacketType::SUBSCRIBE) {
         auto topic_callback = [&](auto* topic) {
             auto connection_heap = packet->connection()->CreateHeapCopy();
-            const typename DataStore::Key target_key = DataStore::EncodeKey(topic->data, topic->length);
+            const auto target_key = DataStore::EncodeKey(topic->data, topic->length);
 
             data_->AddObserver(
                 [&target_key, conn = std::move(connection_heap)]
@@ -127,14 +128,10 @@ public:
         return Status::Failure("Unsupported packet type.");
       }
 
-    	return Status::Ok();
+      return Status::Ok();
     }
 
 private:
-    static bool WriteHeader(uint64_t /*key*/, uint32_t /*timestamp*/, uint32_t /*length*/,
-	    ClientConnection* /*connection*/) {
-     	return true;
-    }
 
     std::list<std::unique_ptr<ClientConnection>> connections_;
     DataStore* data_;
