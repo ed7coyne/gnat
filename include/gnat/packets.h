@@ -52,7 +52,7 @@ struct StringBuffer {
     char data[Size] = {0};
     uint16_t length = 0;
 };
-    
+
 namespace {
 
 template<typename T, typename Client>
@@ -69,7 +69,7 @@ static bool ReadVariableByteInteger(T* out, Client* client) {
 
       multiplier *= 128;
 
-      if (!(next_byte & 128)) 
+      if (!(next_byte & 128))
         return true;
     }
 }
@@ -99,7 +99,13 @@ struct TypedReadField<Field, TYPE_BYTES> {
 template<typename T, typename Client>
 static bool Read(Client* client, T* out) {
   static_assert(sizeof(*out) >= Field::byte_count, "");
-  return client->ReadAll((uint8_t*)out, Field::byte_count);
+  bool result = true;
+  // Wire format is big endian but all target arch are little.
+  // For noop loops the compiler will remove all the garbage.
+  for (int i = Field::byte_count - 1; i >= 0 && result; i--) {
+    client->ReadAll((uint8_t*)out + i, 1);
+  }
+  return result;
 }
 };
 
@@ -147,10 +153,10 @@ struct FixedHeader {
     }
 
     uint8_t control = 0;
-    uint32_t remaining_size = 0; 
+    uint32_t remaining_size = 0;
 };
 
-// Packets for MQTT <= 3.1.1 
+// Packets for MQTT <= 3.1.1
 // Things changed dramatically for MQTT 5.
 namespace proto3 {
 
@@ -172,7 +178,7 @@ struct Connect {
       DEBUG_LOG("Failed to read protocol level.\n");
       return {};
     }
-    
+
     if (!ReadField<ConnectFlags>(client, &out.flags)) {
       DEBUG_LOG("Failed to read flags.\n");
       return {};
@@ -194,7 +200,7 @@ struct Connect {
 
     // We will come back to set the length last, it will be one byte though.
     uint8_t* remaining_length = &buffer[current_byte++];
-    
+
     // Write protocol_name.
     buffer[current_byte++] = 0;
     buffer[current_byte++] = protocol_name.length;
@@ -210,7 +216,7 @@ struct Connect {
     *remaining_length = current_byte - 2; // remove common header bytes.
     return client->WriteAll(buffer, current_byte);
   }
-   
+
   StringBuffer<6> protocol_name;
   uint8_t protocol_level;
   uint8_t flags;
@@ -266,7 +272,7 @@ struct Publish {
     }
 
     if (((flags >> 1) & 0b11) != 0) {
-      // We currently don't support QoS and ignore this, we need to 
+      // We currently don't support QoS and ignore this, we need to
       // read it to ensure the payload size is right.
       uint16_t id = 0;
       if (!ReadField<PacketId>(client, &id)) {
@@ -285,9 +291,9 @@ struct Publish {
     static uint8_t buffer[48] = {0};
     uint8_t current_byte = 0;
     constexpr uint8_t flags = 0; // We can expand functionality here.
-    buffer[current_byte++] = 
+    buffer[current_byte++] =
         (((uint8_t)PacketType::PUBLISH << 4) & 0xF0) | (flags & 0xF);
-    
+
     //TODO: handle over 128 bytes!
     auto* packet_length = &buffer[current_byte++];
 
@@ -295,13 +301,13 @@ struct Publish {
     buffer[current_byte++] = topic.length;
     memcpy(buffer + current_byte, topic.data, topic.length);
     current_byte += topic.length;
-    
+
     buffer[current_byte++] = 0; // props_length
-    const auto header_size = current_byte; 
+    const auto header_size = current_byte;
 
     const auto packet_size = header_size + payload_bytes;
     *packet_length = packet_size - 2; // remove fixed header from size.
-    
+
 //    DEBUG_LOG("Writing Publish, size: %u\n", packet_size);
 //    LogHex(payload, payload_size);
 
@@ -324,8 +330,7 @@ struct Subscribe {
     static std::optional<Subscribe> ReadFrom(Client* client, TopicCallback&& callback) {
         Subscribe out;
 
-        uint16_t id = 0;
-        if (!ReadField<PacketId>(client, &id)) {
+        if (!ReadField<PacketId>(client, &out.packet_id)) {
             DEBUG_LOG("Failed to read packet id.\n");
             return {};
         }
@@ -350,9 +355,12 @@ struct Subscribe {
 
         return out;
     }
+
+    uint16_t packet_id = 0;
 };
 
 struct SubscribeAck {
+  uint16_t subscribe_packet_id = 0;
   uint8_t responses[32] = {0};
   uint8_t responses_count = 0;
 
@@ -363,12 +371,14 @@ struct SubscribeAck {
     buffer[current_byte++] = ((uint8_t)PacketType::SUBACK << 4) & 0xF0;
     // We will come back to set the length last, it will be one byte though.
     uint8_t* remaining_length = &buffer[current_byte++];
-    
-    buffer[current_byte++] = 0; // payload bytes.
+
+    // PacketId
+    buffer[current_byte++] = subscribe_packet_id >> 8;
+    buffer[current_byte++] = subscribe_packet_id & 0xFF;
 
     memcpy(buffer + current_byte, responses, responses_count);
     current_byte += responses_count + 1;
-   
+
     const uint8_t packet_size = current_byte - 1;
     *remaining_length = packet_size - 2; // remove bytes for type and length.
     LOG("Sending SubAck: size: %u remaining: %u responses: %u\n",
@@ -405,12 +415,12 @@ public:
         return Packet(header->control, header->remaining_size, std::move(connection));
     }
 
-  Packet(uint8_t control, size_t bytes_remaining, ClientConnection connection) 
+  Packet(uint8_t control, size_t bytes_remaining, ClientConnection connection)
       : control_(control), bytes_remaining_(bytes_remaining), connection_(std::move(connection)) {
     DEBUG_LOG("New packet, size: %u\n", (uint32_t)bytes_remaining);
   }
 
-  Packet(Packet&& from) 
+  Packet(Packet&& from)
     : control_(from.control_),
       bytes_remaining_(from.bytes_remaining_),
       connection_(std::move(from.connection_)) {
@@ -418,7 +428,7 @@ public:
   }
 
   ~Packet() {
-    // If the packet is destructed make sure we read all of our data from the 
+    // If the packet is destructed make sure we read all of our data from the
     // connection so it is clean for the next packet.
     if (bytes_remaining_ > 0) {
       DEBUG_LOG("Packet destructed with %d bytes, draining.\n", bytes_remaining_);

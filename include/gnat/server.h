@@ -109,6 +109,7 @@ public:
         }
 
         proto3::SubscribeAck ack {
+          .subscribe_packet_id = subscribe_opt->packet_id,
           .responses = {0},
           .responses_count = 1,
         };

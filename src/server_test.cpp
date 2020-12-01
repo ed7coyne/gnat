@@ -23,8 +23,22 @@ struct FakeConnection {
     }
 };
 
+struct Buffer {
+  constexpr static const size_t kSize = 1024;
+  uint8_t buffer[kSize] = {0};
+  size_t position = 0;
+
+  size_t remaining() {
+    return kSize - position;
+  }
+};
+
 struct BufferConnection {
-    BufferConnection(uint8_t* buffer, size_t size) : out_buffer_(buffer), out_size_(size) {}
+    BufferConnection(uint8_t* buffer, size_t size)
+        : out_buffer_(buffer), out_size_(size), in_buffer_(new Buffer()) {}
+
+    BufferConnection(uint8_t* buffer, size_t size, std::shared_ptr<Buffer> in_buffer)
+        : out_buffer_(buffer), out_size_(size), in_buffer_(in_buffer) {}
 
     bool ReadAll(uint8_t* to, size_t to_size) {
         LOG("Reading: %u\n", to_size);
@@ -39,7 +53,7 @@ struct BufferConnection {
     }
 
     bool WriteAll(uint8_t* from, size_t from_size) {
-        auto to_copy = std::min(from_size, kInBufferSize - in_position_);
+        auto to_copy = std::min(from_size, in_buffer_->remaining());
         if (to_copy == 0) {
             LOG("Read past end!\n");
             return false;
@@ -50,8 +64,8 @@ struct BufferConnection {
         }
         LOG("\n");
 
-        memcpy(in_buffer_ + in_position_, from, to_copy);
-        in_position_ += to_copy;
+        memcpy(in_buffer_->buffer + in_buffer_->position, from, to_copy);
+        in_buffer_->position += to_copy;
         return true;
     }
 
@@ -67,7 +81,8 @@ struct BufferConnection {
     }
 
     BufferConnection CreateHeapCopy() {
-        return BufferConnection(out_buffer_ + out_position_, out_size_ - out_position_);
+        return BufferConnection(out_buffer_ + out_position_, out_size_ - out_position_,
+                                in_buffer_);
     }
 
     gnat::ConnectionType connection_type() { return type_; }
@@ -77,9 +92,7 @@ struct BufferConnection {
     const size_t out_size_;
     size_t out_position_ = 0;
 
-    constexpr static const size_t kInBufferSize = 1024;
-    uint8_t in_buffer_[kInBufferSize];
-    size_t in_position_ = 0;
+    std::shared_ptr<Buffer> in_buffer_;
 
     gnat::ConnectionType type_ = gnat::ConnectionType::UNKNOWN;
 };
@@ -192,8 +205,64 @@ TEST(ServerTest, PublishPacketStringKeyHandling) {
     ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&packet));
 }
 
+TEST(ServerTest, SubscribePacket) {
+    constexpr static uint8_t kData[] = {
+      0b10000010, 11, 0x0, 0x1, 0x0, 0x6,
+      't', '/', 't', 'e', 's', 't', 0,
+    };
 
-//TODO Add subscribe/publish/receive test!
+    FakeClock clock;
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+
+    BufferConnection connection((uint8_t*)kData, sizeof(kData));
+
+    auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
+    ASSERT_EQ(packet.type(), gnat::PacketType::SUBSCRIBE);
+    ASSERT_EQ(packet.bytes_remaining(), 11);
+
+    int topics = 0;
+    std::string captured_topic;
+    auto topic_callback = [&](auto* topic) {
+      topics++;
+      captured_topic = std::string(topic->data, topic->length);
+      return true;
+    };
+
+    const auto header_opt = gnat::proto3::Subscribe::ReadFrom(&packet, topic_callback);
+    ASSERT_TRUE(header_opt.has_value());
+
+    EXPECT_EQ(header_opt->packet_id, 1);
+    EXPECT_EQ(topics, 1);
+    EXPECT_EQ(captured_topic, "t/test");
+}
+
+TEST(ServerTest, SubscribePacketHandling) {
+    constexpr static uint8_t kData[] = {
+      0b10000010, 11, 0x0, 0x1, 0x0, 0x6,
+      't', '/', 't', 'e', 's', 't', 0,
+    };
+
+    FakeClock clock;
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+
+    std::shared_ptr<Buffer> data_written(new Buffer);
+    BufferConnection connection((uint8_t*)kData, sizeof(kData), data_written);
+
+    auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
+    ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&packet));
+    // Ensure we got a subscribtion ack.
+    ASSERT_GE(5, data_written->position);
+    ASSERT_EQ(0b10010000, data_written->buffer[0]);
+
+    // And that it is for our packet id
+    ASSERT_EQ(1, data_written->buffer[3]);
+
+    // And that it is not an error
+    ASSERT_EQ(0, data_written->buffer[4]);
+}
+
 
 /*
 TEST(ServerTest, IntakeExhaust) {
