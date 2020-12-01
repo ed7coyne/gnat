@@ -29,7 +29,7 @@ enum class ConnectionType {
  * uint32_t timestamp();
 */
 
-template<typename ClientConnection, typename Clock>
+template<typename ClientConnection, typename DataStore, typename Clock>
 class Server {
 public:
     Server(DataStore* data, Clock* clock) : data_(data), clock_(clock) {}
@@ -41,7 +41,7 @@ public:
         DEBUG_LOG("Header Read, proto: %s\n", (*connect).protocol_name.data);
         proto3::ConnectAck ack;
         if (!connect.has_value() || (
-            strcmp("MQTT", (*connect).protocol_name.data) == 0 && 
+            strcmp("MQTT", (*connect).protocol_name.data) == 0 &&
             strcmp("MQIsdp", (*connect).protocol_name.data) == 0)) {
             LOG("Connect packet has wrong header or wrong protocol.\n");
             ack.error = true;
@@ -69,7 +69,7 @@ public:
         }
         const auto& publish = *publish_opt;
 
-        DataStore::Entry entry(clock_->timestamp());
+        DataStoreEntry entry(clock_->timestamp());
         entry.length = publish.payload_bytes;
         entry.data = std::unique_ptr<uint8_t[]>(new uint8_t[entry.length]);
         if (!packet->ReadAll(entry.data.get(), entry.length)) {
@@ -86,7 +86,7 @@ public:
             const uint64_t target_key = key::EncodeString(topic->data, topic->length);
 
             data_->AddObserver(
-                [target_key, conn = std::move(connection_heap)](uint64_t key, const DataStore::Entry& entry) mutable {
+                [target_key, conn = std::move(connection_heap)](uint64_t key, const DataStoreEntry& entry) mutable {
                   if (target_key == key) {
                     LOG("Writing to client!\n");
                     proto3::Publish packet;

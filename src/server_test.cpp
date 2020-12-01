@@ -19,7 +19,7 @@ struct FakeConnection {
     std::function<bool(char*, size_t)> WriteAll;
 
     FakeConnection CreateHeapCopy() {
-        return *this; 
+        return *this;
     }
 };
 
@@ -65,14 +65,14 @@ struct BufferConnection {
       }
       return true;
     }
-    
+
     BufferConnection CreateHeapCopy() {
-        return BufferConnection(out_buffer_ + out_position_, out_size_ - out_position_); 
+        return BufferConnection(out_buffer_ + out_position_, out_size_ - out_position_);
     }
 
     gnat::ConnectionType connection_type() { return type_; }
     void set_connection_type(gnat::ConnectionType type) { type_ = type; }
-    
+
     uint8_t* out_buffer_;
     const size_t out_size_;
     size_t out_position_ = 0;
@@ -96,14 +96,14 @@ TEST(ServerTest, ConnectPacket) {
         0x63};
 
     FakeClock clock;
-    gnat::DataStore data;
-    gnat::Server<BufferConnection, FakeClock> server(&data, &clock);
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
     auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
-    ASSERT_EQ(packet.type(), gnat::PacketType::CONNECT); 
-    ASSERT_EQ(packet.bytes_remaining(), 31); 
+    ASSERT_EQ(packet.type(), gnat::PacketType::CONNECT);
+    ASSERT_EQ(packet.bytes_remaining(), 31);
 
     const auto header_opt = gnat::proto3::Connect::ReadFrom(&packet);
     ASSERT_TRUE(header_opt.has_value());
@@ -124,8 +124,8 @@ TEST(ServerTest, ConnectPacketHandling) {
         0x63};
 
     FakeClock clock;
-    gnat::DataStore data;
-    gnat::Server<BufferConnection, FakeClock> server(&data, &clock);
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -137,19 +137,19 @@ TEST(ServerTest, ConnectPacketHandling) {
 
 TEST(ServerTest, PublishPacket) {
     constexpr static uint8_t kData[] = {
-      0x30, 0xC, 0x0, 0x6, 0x74, 0x2F, 0x74, 0x65, 0x73, 
+      0x30, 0xC, 0x0, 0x6, 0x74, 0x2F, 0x74, 0x65, 0x73,
       0x74, 0x74, 0x65, 0x73, 0x74
     };
 
     FakeClock clock;
-    gnat::DataStore data;
-    gnat::Server<BufferConnection, FakeClock> server(&data, &clock);
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
     auto packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(connection));
-    ASSERT_EQ(packet.type(), gnat::PacketType::PUBLISH); 
-    ASSERT_EQ(packet.bytes_remaining(), 12); 
+    ASSERT_EQ(packet.type(), gnat::PacketType::PUBLISH);
+    ASSERT_EQ(packet.bytes_remaining(), 12);
 
     const auto header_opt = gnat::proto3::Publish::ReadFrom(&packet, packet.type_flags());
     ASSERT_TRUE(header_opt.has_value());
@@ -162,13 +162,13 @@ TEST(ServerTest, PublishPacket) {
 
 TEST(ServerTest, PublishPacketHandling) {
     constexpr static uint8_t kData[] = {
-      0x30, 0xC, 0x0, 0x6, 0x74, 0x2F, 0x74, 0x65, 0x73, 
+      0x30, 0xC, 0x0, 0x6, 0x74, 0x2F, 0x74, 0x65, 0x73,
       0x74, 0x74, 0x65, 0x73, 0x74
     };
 
     FakeClock clock;
-    gnat::DataStore data;
-    gnat::Server<BufferConnection, FakeClock> server(&data, &clock);
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -188,7 +188,7 @@ TEST(ServerTest, IntakeExhaust) {
     write_conn.WriteAll = [&written](char* buffer, size_t size) {
         const auto old_size = written.size();
         written.resize(old_size + size);
-        memcpy(written.data() + old_size, buffer, size); 
+        memcpy(written.data() + old_size, buffer, size);
         return true;
     };
 
@@ -212,7 +212,7 @@ TEST(ServerTest, IntakeExhaust) {
         FakeConnection read_conn;
         ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(command, read_conn));
     }
-    
+
     ASSERT_TRUE(value == std::string(written.data(), written.size()));
 }
 */

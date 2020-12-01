@@ -7,37 +7,38 @@
 
 namespace gnat {
 
+struct DataStoreEntry {
+    std::unique_ptr<uint8_t[]> data;
+    uint32_t length = 0;
+    uint32_t timestamp = 0;
+
+    DataStoreEntry() = default;
+    DataStoreEntry(uint32_t timestamp) : timestamp(timestamp) {}
+
+    DataStoreEntry(DataStoreEntry&& other) = default;
+    DataStoreEntry(const DataStoreEntry&) = delete;
+    DataStoreEntry& operator=(const DataStoreEntry&) = delete;
+};
+
+template<typename KeyType>
 class DataStore {
 public:
-    struct Entry {
-        std::unique_ptr<uint8_t[]> data;
-        uint32_t length = 0;
-        uint32_t timestamp = 0;
-
-        Entry() = default;
-        Entry(uint32_t timestamp) : timestamp(timestamp) {}
-
-        Entry(Entry&& other) = default;
-        Entry(const Entry&) = delete;
-        Entry& operator=(const Entry&) = delete;      
-    };
-
-    void Set(uint64_t key, Entry entry) {
+    void Set(KeyType key, DataStoreEntry entry) {
         entries_.erase(key);
         entries_.emplace(key, std::move(entry));
         NotifyObservers(key);
     }
 
-    const Entry& Get(uint64_t key) {
-    	return entries_.at(key);
+    const DataStoreEntry& Get(KeyType key) {
+        return entries_.at(key);
     }
 
-    void AddObserver(std::function<bool(uint64_t, const Entry&)> observer) {
+    void AddObserver(std::function<bool(KeyType, const DataStoreEntry&)> observer) {
         observers_.emplace_back(std::move(observer));
     }
 
 private:
-    void NotifyObservers(uint64_t key) {
+    void NotifyObservers(KeyType key) {
         const auto& value = entries_[key];
         for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
             auto& observer = *iter;
@@ -48,8 +49,8 @@ private:
         }
     }
 
-   std::unordered_map<uint64_t, Entry> entries_;
-   std::list<std::function<bool(uint64_t, const Entry&)>> observers_;
+   std::unordered_map<KeyType, DataStoreEntry> entries_;
+   std::list<std::function<bool(KeyType, const DataStoreEntry&)>> observers_;
 };
 
 } // namespace gnat

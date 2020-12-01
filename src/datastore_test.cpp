@@ -7,10 +7,8 @@
 namespace {
 constexpr auto kKey = gnat::key::Encode("TEST");
 
-using gnat::DataStore;
-
-DataStore::Entry ToEntry(const char* value) {
-    DataStore::Entry out;
+gnat::DataStoreEntry ToEntry(const char* value) {
+    gnat::DataStoreEntry out;
     out.length = strlen(value);
     out.data = std::make_unique<uint8_t[]>(out.length);
     memcpy(out.data.get(), value, out.length);
@@ -20,7 +18,7 @@ DataStore::Entry ToEntry(const char* value) {
 }
 
 TEST(DataStoreTest, StoreRetreive) {
-    DataStore store;
+    gnat::DataStore<uint64_t> store;
     const std::string value("I'M A TEST!");
     store.Set(kKey, ToEntry(value.c_str()));
 
@@ -29,12 +27,12 @@ TEST(DataStoreTest, StoreRetreive) {
 }
 
 TEST(DataStoreTest, Notify) {
-    DataStore store;
+    gnat::DataStore<uint64_t> store;
 
     uint64_t notified_key = 0;
     std::vector<char> notified_data;
     store.AddObserver([&notified_key, &notified_data](
-                uint64_t key, const DataStore::Entry& entry) {
+                uint64_t key, const gnat::DataStoreEntry& entry) {
         notified_key = key;
         notified_data.resize(entry.length);
         memcpy(notified_data.data(), entry.data.get(), entry.length);
@@ -54,11 +52,11 @@ TEST(DataStoreTest, Notify) {
 }
 
 TEST(DataStoreTest, RemoveFailedObserver) {
-    DataStore store;
+    gnat::DataStore<uint64_t> store;
 
     int notified_count = 0;
     store.AddObserver(
-            [&notified_count](uint64_t, const DataStore::Entry&) {
+            [&notified_count](uint64_t, const gnat::DataStoreEntry&) {
                 notified_count++;
                 return false;
             });
