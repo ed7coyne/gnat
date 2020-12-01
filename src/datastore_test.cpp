@@ -5,7 +5,8 @@
 #include "key.h"
 
 namespace {
-constexpr auto kKey = gnat::key::Encode("TEST");
+constexpr auto kKey = "TEST";
+constexpr auto kKeyUint = gnat::key::Encode("TEST");
 
 gnat::DataStoreEntry ToEntry(const char* value) {
     gnat::DataStoreEntry out;
@@ -20,11 +21,21 @@ gnat::DataStoreEntry ToEntry(const char* value) {
 TEST(DataStoreTest, StoreRetreive) {
     gnat::DataStore<uint64_t> store;
     const std::string value("I'M A TEST!");
+    store.Set(kKeyUint, ToEntry(value.c_str()));
+
+    const auto& entry = store.Get(kKeyUint);
+    ASSERT_TRUE(value == (char*)entry.data.get());
+}
+
+TEST(DataStoreTest, StoreRetreiveString) {
+    gnat::DataStore<std::string> store;
+    const std::string value("I'M A TEST!");
     store.Set(kKey, ToEntry(value.c_str()));
 
     const auto& entry = store.Get(kKey);
     ASSERT_TRUE(value == (char*)entry.data.get());
 }
+
 
 TEST(DataStoreTest, Notify) {
     gnat::DataStore<uint64_t> store;
@@ -39,6 +50,29 @@ TEST(DataStoreTest, Notify) {
         return true;
     });
 
+    const std::string value("I'M A TEST!");
+    store.Set(kKeyUint, ToEntry(value.c_str()));
+
+    ASSERT_EQ(notified_key, kKeyUint);
+    ASSERT_NE(0, notified_data.size());
+
+    const std::string notified_string(notified_data.data(), notified_data.size());
+    ASSERT_TRUE(value == notified_string)
+        << "notified_data: " << notified_string << "\n";
+}
+
+TEST(DataStoreTest, NotifyString) {
+    gnat::DataStore<std::string> store;
+
+    std::string notified_key;
+    std::vector<char> notified_data;
+    store.AddObserver([&notified_key, &notified_data](
+                const std::string& key, const gnat::DataStoreEntry& entry) {
+        notified_key = key;
+        notified_data.resize(entry.length);
+        memcpy(notified_data.data(), entry.data.get(), entry.length);
+        return true;
+    });
 
     const std::string value("I'M A TEST!");
     store.Set(kKey, ToEntry(value.c_str()));
@@ -51,6 +85,7 @@ TEST(DataStoreTest, Notify) {
         << "notified_data: " << notified_string << "\n";
 }
 
+
 TEST(DataStoreTest, RemoveFailedObserver) {
     gnat::DataStore<uint64_t> store;
 
@@ -61,8 +96,8 @@ TEST(DataStoreTest, RemoveFailedObserver) {
                 return false;
             });
     const std::string value("I'M A TEST!");
-    store.Set(kKey, ToEntry(value.c_str()));
-    store.Set(kKey, ToEntry("TEST2"));
+    store.Set(kKeyUint, ToEntry(value.c_str()));
+    store.Set(kKeyUint, ToEntry("TEST2"));
 
     ASSERT_EQ(1, notified_count);
 }

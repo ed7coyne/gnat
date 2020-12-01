@@ -23,22 +23,22 @@ struct DataStoreEntry {
 template<typename KeyType>
 class DataStore {
 public:
-    void Set(KeyType key, DataStoreEntry entry) {
+    void Set(const KeyType& key, DataStoreEntry entry) {
         entries_.erase(key);
         entries_.emplace(key, std::move(entry));
         NotifyObservers(key);
     }
 
-    const DataStoreEntry& Get(KeyType key) {
+    const DataStoreEntry& Get(const KeyType& key) {
         return entries_.at(key);
     }
 
-    void AddObserver(std::function<bool(KeyType, const DataStoreEntry&)> observer) {
+    void AddObserver(std::function<bool(const KeyType&, const DataStoreEntry&)> observer) {
         observers_.emplace_back(std::move(observer));
     }
 
 private:
-    void NotifyObservers(KeyType key) {
+    void NotifyObservers(const KeyType& key) {
         const auto& value = entries_[key];
         for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
             auto& observer = *iter;
@@ -50,7 +50,7 @@ private:
     }
 
    std::unordered_map<KeyType, DataStoreEntry> entries_;
-   std::list<std::function<bool(KeyType, const DataStoreEntry&)>> observers_;
+   std::list<std::function<bool(const KeyType&, const DataStoreEntry&)>> observers_;
 };
 
 } // namespace gnat
