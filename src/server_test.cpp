@@ -263,44 +263,43 @@ TEST(ServerTest, SubscribePacketHandling) {
     ASSERT_EQ(0, data_written->buffer[4]);
 }
 
-
-/*
-TEST(ServerTest, IntakeExhaust) {
+TEST(ServerTest, SubscribePublishHandling) {
     FakeClock clock;
-    gnat::DataStore data;
-    gnat::Server<FakeConnection, FakeClock> server(&data, &clock);
+    gnat::DataStore<uint64_t> data;
+    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
-    std::vector<char> written;
-    FakeConnection write_conn;
-    write_conn.WriteAll = [&written](char* buffer, size_t size) {
-        const auto old_size = written.size();
-        written.resize(old_size + size);
-        memcpy(written.data() + old_size, buffer, size);
-        return true;
+    constexpr static uint8_t kSubscribeData[] = {
+      0b10000010, 11, 0x0, 0x1, 0x0, 0x6,
+      't', '/', 't', 'e', 's', 't', 0,
     };
 
-    const std::string value("I'M A TEST!");
-    {
-        gnat::SessionInitialization command;
-        command.type = gnat_chamber_SessionInitialization_SessionType_EXHAUST;
-        command.has_key = true;
-        command.key = kKey;
+    std::shared_ptr<Buffer> data_written(new Buffer);
+    BufferConnection subscribe_connection((uint8_t*)kSubscribeData, sizeof(kSubscribeData),
+                                          data_written);
+    auto subscribe_packet =
+        *gnat::Packet<BufferConnection>::ReadNext(std::move(subscribe_connection));
+    ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&subscribe_packet));
 
-        ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(command, write_conn));
-    }
-    {
-        gnat::SessionInitialization command;
-        command.type = gnat_chamber_SessionInitialization_SessionType_INTAKE;
-        command.has_key = true;
-        command.key = kKey;
-        command.has_data_size = true;
-        command.data_size = value.length();
+    // Ensure we got a subscribtion ack.
+    ASSERT_GE(5, data_written->position);
+    ASSERT_EQ(0b10010000, data_written->buffer[0]);
+    const auto ack_length = data_written->buffer[1] + 2;
 
-        FakeConnection read_conn;
-        ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(command, read_conn));
-    }
+    // No other data in our buffer before we publish something.
+    ASSERT_EQ(ack_length, data_written->position);
 
-    ASSERT_TRUE(value == std::string(written.data(), written.size()));
+    constexpr static uint8_t kPublishData[] = {
+      0x30, 0xC, 0x0, 0x6, 0x74, 0x2F, 0x74, 0x65, 0x73,
+      0x74, 0x74, 0x65, 0x73, 0x74
+    };
+
+    BufferConnection publish_connection((uint8_t*)kPublishData, sizeof(kPublishData));
+    auto publish_packet = *gnat::Packet<BufferConnection>::ReadNext(std::move(publish_connection));
+    ASSERT_EQ(gnat::Status::Ok(), server.HandleMessage(&publish_packet));
+
+    // Ensure we got a publish.
+    ASSERT_LT(ack_length, data_written->position);
+    ASSERT_EQ(0b0011, data_written->buffer[ack_length] >> 4);
+    ASSERT_EQ(kPublishData[sizeof(kPublishData) - 1], data_written->buffer[data_written->position-1]);
 }
-*/
 

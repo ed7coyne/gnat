@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string.h>
+#include <string>
 #include <memory>
 
 #include "status.h"
@@ -78,7 +78,7 @@ public:
           LOG("Failed to read publish. Size: %lu \n", entry.length);
           return Status::Failure("Unable to complete read.");
         }
-        DEBUG_LOG("Read publish.");
+        DEBUG_LOG("Read publish.\n");
         const auto key = DataStore::EncodeKey(publish.topic.data, publish.topic.length);
         data_->Set(key, std::move(entry));
       } else if (packet->type() == PacketType::SUBSCRIBE) {
@@ -87,7 +87,7 @@ public:
             const auto target_key = DataStore::EncodeKey(topic->data, topic->length);
 
             data_->AddObserver(
-                [&target_key, conn = std::move(connection_heap)]
+                [target_key, conn = std::move(connection_heap)]
                 (typename DataStore::Key key, const DataStoreEntry& entry) mutable {
                   if (target_key == key) {
                     LOG("Writing to client!\n");
