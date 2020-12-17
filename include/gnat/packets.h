@@ -302,7 +302,6 @@ struct Publish {
     memcpy(buffer + current_byte, topic.data, topic.length);
     current_byte += topic.length;
 
-    buffer[current_byte++] = 0; // props_length
     const auto header_size = current_byte;
 
     const auto packet_size = header_size + payload_bytes;
