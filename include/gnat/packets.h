@@ -232,6 +232,25 @@ static constexpr Connect kDefaultConnect{
 };
 
 struct ConnectAck {
+  using Flags = PacketField<1>;
+  using ReturnCode = PacketField<1>;
+  
+  template<typename Client>
+  static std::optional<ConnectAck2> ReadFrom(Client* client) {
+    ConnectAck2 out;
+    if (!ReadField<Flags>(client, &out.flags)) {
+      DEBUG_LOG("Failed to read flags.\n");
+      return {};
+    }
+
+    if (!ReadField<ReturnCode>(client, &out.return_code)) {
+      DEBUG_LOG("Failed to read code.\n");
+      return {};
+		}
+
+    return out;
+  }
+  
   template<typename Client>
   bool SendOn(Client* client) {
     static uint8_t buffer[128] = {0};
@@ -256,7 +275,12 @@ struct ConnectAck {
     return client->WriteAll(buffer, packet_size);
   }
 
+	// Used when sending.
   bool error = false;
+
+	// Used when receiving.
+	uint8_t flags = 0;
+	uint8_t return_code = 0;
 };
 
 struct Publish {
@@ -355,14 +379,62 @@ struct Subscribe {
         return out;
     }
 
+    template<typename Client>
+    bool SendOn(Client* client) const {
+      static uint8_t buffer[128] = {0};
+      uint8_t current_byte = 0;
+      buffer[current_byte++] = (((uint8_t)PacketType::SUBSCRIBE << 4) & 0xF0);
+
+      // We will come back to set the length last, it will be one byte though.
+      uint8_t* remaining_length = &buffer[current_byte++];
+
+      // Packet identifier
+      buffer[current_byte++] = packet_id >> 8;
+      buffer[current_byte++] = packet_id & 0xFF;
+
+      // Write topic name.
+      buffer[current_byte++] = 0;
+      buffer[current_byte++] = topic_name.length;
+      memcpy(buffer + current_byte, topic_name.data, topic_name.length);
+      current_byte += topic_name.length;
+
+      // QoS is always zero for now.
+      buffer[current_byte++] = 0;
+
+      *remaining_length = current_byte - 2; // remove common header bytes.
+      return client->WriteAll(buffer, current_byte);
+    }
+
+    // TODO Spec supports more than one topic.
+    StringBuffer<25> topic_name;
     uint16_t packet_id = 0;
 };
 
 struct SubscribeAck {
+  using PacketId = PacketField<2>;
+  using Response = PacketField<1>;
+  
   uint16_t subscribe_packet_id = 0;
   uint8_t responses[32] = {0};
   uint8_t responses_count = 0;
 
+  template<typename Client>
+  static std::optional<SubscribeAck2> ReadFrom(Client* client) {
+    SubscribeAck2 out;
+    if (!ReadField<PacketId>(client, &out.subscribe_packet_id)) {
+      DEBUG_LOG("Failed to read id.\n");
+      return {};
+    }
+
+		out.responses_count = 1;
+    if (!ReadField<Response>(client, &out.responses[0])) {
+      DEBUG_LOG("Failed to read response.\n");
+      return {};
+		}
+
+    return out;
+  }
+  
   template<typename ClientConnection>
   bool SendOn(ClientConnection* connection) {
     static uint8_t buffer[32] = {0};
