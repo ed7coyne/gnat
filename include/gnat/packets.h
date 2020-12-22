@@ -236,7 +236,7 @@ struct ConnectAck {
   using ReturnCode = PacketField<1>;
   
   template<typename Client>
-  static std::optional<ConnectAck2> ReadFrom(Client* client) {
+  static std::optional<ConnectAck> ReadFrom(Client* client) {
     ConnectAck2 out;
     if (!ReadField<Flags>(client, &out.flags)) {
       DEBUG_LOG("Failed to read flags.\n");
@@ -419,7 +419,7 @@ struct SubscribeAck {
   uint8_t responses_count = 0;
 
   template<typename Client>
-  static std::optional<SubscribeAck2> ReadFrom(Client* client) {
+  static std::optional<SubscribeAck> ReadFrom(Client* client) {
     SubscribeAck2 out;
     if (!ReadField<PacketId>(client, &out.subscribe_packet_id)) {
       DEBUG_LOG("Failed to read id.\n");
