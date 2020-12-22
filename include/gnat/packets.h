@@ -237,7 +237,7 @@ struct ConnectAck {
   
   template<typename Client>
   static std::optional<ConnectAck> ReadFrom(Client* client) {
-    ConnectAck2 out;
+    ConnectAck out;
     if (!ReadField<Flags>(client, &out.flags)) {
       DEBUG_LOG("Failed to read flags.\n");
       return {};
@@ -420,7 +420,7 @@ struct SubscribeAck {
 
   template<typename Client>
   static std::optional<SubscribeAck> ReadFrom(Client* client) {
-    SubscribeAck2 out;
+    SubscribeAck out;
     if (!ReadField<PacketId>(client, &out.subscribe_packet_id)) {
       DEBUG_LOG("Failed to read id.\n");
       return {};
