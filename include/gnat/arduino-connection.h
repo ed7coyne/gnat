@@ -7,9 +7,6 @@
 
 #include "server.h"
 
-// Enables debug messages in gnat-arduino.
-//#define ARDUINO_DEBUG 1
-
 #ifdef ARDUINO
 
 namespace arduino {
@@ -40,12 +37,29 @@ public:
     while (bytes > 0) {
       DEBUG_LOG("Reading: %u\n", bytes);
       
-      while (client_->available() < 1 && client_->connected());
+      while (client_->available() < 1 && client_->connected()) delay(1);
+
+      if (!client_->connected()) {
+        LOG("Client disconnected..");
+        return false;
+      }
+      errno = 0;
       const auto read = client_->read(buffer, bytes);
       DEBUG_LOG("\tRead: %d\n", read);
-      //Serial.println((uint8_t)buffer[0], HEX);
-      if (read == -1) return false;
-      bytes -= read; 
+      if (read < 1) {
+        if (errno == ENOTCONN) {
+          LOG("Connection dropped.");
+          return false;
+        } else if (errno == EAGAIN) {
+          LOG("\tRead timeout, retry.\n");
+          delay(50);
+        } else if (read < 0)  {
+          LOG("\tRead failed errno: %d\n", errno);
+          return false;
+        }
+      } else {
+        bytes -= read;
+      }
     }
     
     return true;
@@ -64,16 +78,14 @@ public:
   }
   
   bool WriteAll(uint8_t* buffer, size_t bytes) {
+    DEBUG_LOG("Writing %u bytes, first %X last: %x\n", bytes, buffer[0], buffer[bytes-1]);
     while (bytes > 0) {
-      DEBUG_LOG("Writing %u bytes\n", bytes);
-     
       const auto written = client_->write((char*)buffer, bytes);
-      DEBUG_LOG("\t Written %u bytes\n", written);
+      DEBUG_LOG("\t Wrote %u bytes\n", written);
       if (written == -1 || !client_->connected()) return false;
       buffer += written;
       bytes -= written;
     }
-    //client_->flush();
     return true;
   }
 
