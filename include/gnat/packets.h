@@ -80,7 +80,6 @@ static bool ReadString(T* out, Client* client) {
     if (!client->ReadAll(length_raw, 2)) return false;
 
     out->length = (length_raw[0] << 8) | length_raw[1];
-    LOG("%lu\n", out->length);
     if (out->length > T::kSize) {
         LOG("String too long for buffer!\n");
         return false;
@@ -213,6 +212,12 @@ struct Connect {
     buffer[current_byte++] = keep_alive >> 8;
     buffer[current_byte++] = keep_alive & 0xFF;
 
+    // Write client id.
+    buffer[current_byte++] = 0;
+    buffer[current_byte++] = client_id.length;
+    memcpy(buffer + current_byte, client_id.data, client_id.length);
+    current_byte += client_id.length;
+
     *remaining_length = current_byte - 2; // remove common header bytes.
     return client->WriteAll(buffer, current_byte);
   }
@@ -221,14 +226,18 @@ struct Connect {
   uint8_t protocol_level;
   uint8_t flags;
   uint16_t keep_alive;
+  StringBuffer<23> client_id;
 };
 
 // Connect for generic mqtt 3 session.
 static constexpr Connect kDefaultConnect{
   .protocol_name = {"MQTT", 4},
   .protocol_level = 4,
-  .flags = 0,
+  // Bit 1 means each session is independant and things don't carry over
+  // between connections based on client_id.
+  .flags = 0b10,
   .keep_alive = 0,
+  .client_id = {"GNAT", 4},
 };
 
 struct ConnectAck {
@@ -312,7 +321,9 @@ struct Publish {
 
   template<typename ClientConnection>
   bool SendOn(ClientConnection* connection, uint8_t* payload) {
-    static uint8_t buffer[48] = {0};
+    constexpr auto kBufferSize = 24;
+    static uint8_t buffer[kBufferSize] = {0};
+
     uint8_t current_byte = 0;
     constexpr uint8_t flags = 0; // We can expand functionality here.
     buffer[current_byte++] =
@@ -326,13 +337,11 @@ struct Publish {
     memcpy(buffer + current_byte, topic.data, topic.length);
     current_byte += topic.length;
 
+    assert(current_byte < kBufferSize);
     const auto header_size = current_byte;
 
     const auto packet_size = header_size + payload_bytes;
     *packet_length = packet_size - 2; // remove fixed header from size.
-
-//    DEBUG_LOG("Writing Publish, size: %u\n", packet_size);
-//    LogHex(payload, payload_size);
 
     // Write buffered data.
     if (!connection->WriteAll(buffer, header_size)) return false;
@@ -383,7 +392,8 @@ struct Subscribe {
     bool SendOn(Client* client) const {
       static uint8_t buffer[128] = {0};
       uint8_t current_byte = 0;
-      buffer[current_byte++] = (((uint8_t)PacketType::SUBSCRIBE << 4) & 0xF0);
+      // Spec requires bit 1 be set to 1.
+      buffer[current_byte++] = (((uint8_t)PacketType::SUBSCRIBE << 4) | 0b10);
 
       // We will come back to set the length last, it will be one byte though.
       uint8_t* remaining_length = &buffer[current_byte++];
@@ -452,7 +462,7 @@ struct SubscribeAck {
 
     const uint8_t packet_size = current_byte - 1;
     *remaining_length = packet_size - 2; // remove bytes for type and length.
-    LOG("Sending SubAck: size: %u remaining: %u responses: %u\n",
+    DEBUG_LOG("Sending SubAck: size: %u remaining: %u responses: %u\n",
       packet_size, *remaining_length, responses_count);
 
     return connection->WriteAll(buffer, packet_size);
