@@ -15,8 +15,11 @@ public:
 };
 
 struct FakeConnection {
-    std::function<bool(char*, size_t)> ReadAll;
-    std::function<bool(char*, size_t)> WriteAll;
+    std::function<bool(char*, size_t)> Read;
+    std::function<bool(char*, size_t)> Write;
+    bool WritePartial(char* buffer, size_t size) {
+      return Write(buffer, size);
+    }
 
     FakeConnection CreateHeapCopy() {
         return *this;
@@ -40,7 +43,7 @@ struct BufferConnection {
     BufferConnection(uint8_t* buffer, size_t size, std::shared_ptr<Buffer> in_buffer)
         : out_buffer_(buffer), out_size_(size), in_buffer_(in_buffer) {}
 
-    bool ReadAll(uint8_t* to, size_t to_size) {
+    bool Read(uint8_t* to, size_t to_size) {
         LOG("Reading: %u\n", to_size);
         auto to_copy = std::min(to_size, out_size_ - out_position_);
         if (to_copy == 0) {
@@ -52,7 +55,7 @@ struct BufferConnection {
         return true;
     }
 
-    bool WriteAll(uint8_t* from, size_t from_size) {
+    bool Write(uint8_t* from, size_t from_size) {
         auto to_copy = std::min(from_size, in_buffer_->remaining());
         if (to_copy == 0) {
             LOG("Read past end!\n");
@@ -69,12 +72,16 @@ struct BufferConnection {
         return true;
     }
 
+    bool WritePartial(uint8_t* buffer, size_t size) {
+      return Write(buffer, size);
+    }
+
     bool Drain(size_t bytes) {
       constexpr size_t kBuffSize = 1024;
       static uint8_t buffer[kBuffSize];
       while (bytes > 0) {
         const auto to_read = std::min(kBuffSize, bytes);
-        if (!ReadAll(buffer, to_read)) return false;
+        if (!Read(buffer, to_read)) return false;
         bytes -= to_read;
       }
       return true;
@@ -110,7 +117,7 @@ TEST(ServerTest, ConnectPacket) {
 
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -138,7 +145,7 @@ TEST(ServerTest, ConnectPacketHandling) {
 
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -156,7 +163,7 @@ TEST(ServerTest, PublishPacket) {
 
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -181,7 +188,7 @@ TEST(ServerTest, PublishPacketHandling) {
 
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -197,7 +204,7 @@ TEST(ServerTest, PublishPacketStringKeyHandling) {
 
     FakeClock clock;
     gnat::DataStore<std::string> data;
-    gnat::Server<BufferConnection, gnat::DataStore<std::string>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<std::string>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -213,7 +220,7 @@ TEST(ServerTest, SubscribePacket) {
 
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     BufferConnection connection((uint8_t*)kData, sizeof(kData));
 
@@ -245,7 +252,7 @@ TEST(ServerTest, SubscribePacketHandling) {
 
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     std::shared_ptr<Buffer> data_written(new Buffer);
     BufferConnection connection((uint8_t*)kData, sizeof(kData), data_written);
@@ -266,7 +273,7 @@ TEST(ServerTest, SubscribePacketHandling) {
 TEST(ServerTest, SubscribePublishHandling) {
     FakeClock clock;
     gnat::DataStore<uint64_t> data;
-    gnat::Server<BufferConnection, gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
+    gnat::Server<gnat::DataStore<uint64_t>, FakeClock> server(&data, &clock);
 
     constexpr static uint8_t kSubscribeData[] = {
       0b10000010, 11, 0x0, 0x1, 0x0, 0x6,

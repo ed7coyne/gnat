@@ -33,7 +33,7 @@ public:
     return Connection(std::move(heap_client));
   }
 
-  bool ReadAll(uint8_t* buffer, size_t bytes) {
+  bool Read(uint8_t* buffer, size_t bytes) {
     while (bytes > 0) {
       DEBUG_LOG("Reading: %u\n", bytes);
       
@@ -71,13 +71,18 @@ public:
     static uint8_t buffer[kBufferSize];
     while (bytes > 0) {
       const auto to_drain = min(bytes, kBufferSize);
-      if (!ReadAll(buffer, to_drain)) return false;
+      if (!Read(buffer, to_drain)) return false;
       bytes -= to_drain; 
     }
     return true;
   }
   
-  bool WriteAll(uint8_t* buffer, size_t bytes) {
+  bool WritePartial(uint8_t* buffer, size_t bytes) {
+    // For the tcp connection we don't care if it is a full or partial write.
+    return Write(buffer, bytes);
+  }
+
+  bool Write(uint8_t* buffer, size_t bytes) {
     DEBUG_LOG("Writing %u bytes, first %X last: %x\n", bytes, buffer[0], buffer[bytes-1]);
     while (bytes > 0) {
       const auto written = client_->write((char*)buffer, bytes);

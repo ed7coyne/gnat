@@ -20,8 +20,8 @@ enum class ConnectionType {
 
 /*
  * ClientConnection is expected to provide:
- * bool ReadAll(char* buffer, size_t bytes);
- * bool WriteAll(char* buffer, size_t bytes);
+ * bool Read(char* buffer, size_t bytes);
+ * bool Write(char* buffer, size_t bytes);
  * ConnectionType connection_type();
  * void set_connection_type(ConnectionType);
  *
@@ -31,11 +31,12 @@ enum class ConnectionType {
  * DataStore should be a gnat::DataStore with template parameters.
 */
 
-template<typename ClientConnection, typename DataStore, typename Clock>
+template<typename DataStore, typename Clock>
 class Server {
 public:
     Server(DataStore* data, Clock* clock) : data_(data), clock_(clock) {}
 
+    template<typename ClientConnection>
     Status HandleMessage(Packet<ClientConnection>* packet) {
       DEBUG_LOG("Handling message: %u\n", (uint8_t)packet->type());
       if (packet->type() == PacketType::CONNECT) {
@@ -74,7 +75,7 @@ public:
         DataStoreEntry entry(clock_->timestamp());
         entry.length = publish.payload_bytes;
         entry.data = std::unique_ptr<uint8_t[]>(new uint8_t[entry.length]);
-        if (!packet->ReadAll(entry.data.get(), entry.length)) {
+        if (!packet->Read(entry.data.get(), entry.length)) {
           LOG("Failed to read publish. Size: %lu \n", entry.length);
           return Status::Failure("Unable to complete read.");
         }
@@ -133,8 +134,6 @@ public:
     }
 
 private:
-
-    std::list<std::unique_ptr<ClientConnection>> connections_;
     DataStore* data_;
     Clock* clock_;
 };

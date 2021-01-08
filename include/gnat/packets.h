@@ -61,7 +61,7 @@ static bool ReadVariableByteInteger(T* out, Client* client) {
     *out = 0;
     while (true) {
       uint8_t next_byte = 0;
-      if (!client->ReadAll(&next_byte, 1)) {
+      if (!client->Read(&next_byte, 1)) {
           return false;
       }
 
@@ -77,7 +77,7 @@ static bool ReadVariableByteInteger(T* out, Client* client) {
 template<typename T, typename Client>
 static bool ReadString(T* out, Client* client) {
     uint8_t length_raw[2];
-    if (!client->ReadAll(length_raw, 2)) return false;
+    if (!client->Read(length_raw, 2)) return false;
 
     out->length = (length_raw[0] << 8) | length_raw[1];
     if (out->length > T::kSize) {
@@ -85,7 +85,7 @@ static bool ReadString(T* out, Client* client) {
         return false;
     }
 
-   return client->ReadAll((uint8_t*)out->data, out->length);
+   return client->Read((uint8_t*)out->data, out->length);
 }
 
 //TODO: In some glorious world where we could run C++17 this would be a if constexpr
@@ -102,7 +102,7 @@ static bool Read(Client* client, T* out) {
   // Wire format is big endian but all target arch are little.
   // For noop loops the compiler will remove all the garbage.
   for (int i = Field::byte_count - 1; i >= 0 && result; i--) {
-    client->ReadAll((uint8_t*)out + i, 1);
+    client->Read((uint8_t*)out + i, 1);
   }
   return result;
 }
@@ -219,7 +219,7 @@ struct Connect {
     current_byte += client_id.length;
 
     *remaining_length = current_byte - 2; // remove common header bytes.
-    return client->WriteAll(buffer, current_byte);
+    return client->Write(buffer, current_byte);
   }
 
   StringBuffer<6> protocol_name;
@@ -281,7 +281,7 @@ struct ConnectAck {
     LOG("Sending Ack: size: %u, remaining: %u\n",
       packet_size, *remaining_length);
 
-    return client->WriteAll(buffer, packet_size);
+    return client->Write(buffer, packet_size);
   }
 
 	// Used when sending.
@@ -344,9 +344,9 @@ struct Publish {
     *packet_length = packet_size - 2; // remove fixed header from size.
 
     // Write buffered data.
-    if (!connection->WriteAll(buffer, header_size)) return false;
+    if (!connection->WritePartial(buffer, header_size)) return false;
     // Write payload.
-    return connection->WriteAll(payload, payload_bytes);
+    return connection->Write(payload, payload_bytes);
   }
 
   StringBuffer<128> topic;
@@ -412,7 +412,7 @@ struct Subscribe {
       buffer[current_byte++] = 0;
 
       *remaining_length = current_byte - 2; // remove common header bytes.
-      return client->WriteAll(buffer, current_byte);
+      return client->Write(buffer, current_byte);
     }
 
     // TODO Spec supports more than one topic.
@@ -465,7 +465,7 @@ struct SubscribeAck {
     DEBUG_LOG("Sending SubAck: size: %u remaining: %u responses: %u\n",
       packet_size, *remaining_length, responses_count);
 
-    return connection->WriteAll(buffer, packet_size);
+    return connection->Write(buffer, packet_size);
   }
 };
 
@@ -476,7 +476,7 @@ struct PingResp {
       ((uint8_t)PacketType::PINGRESP << 4) & 0xF0,
       0}; // Size is always zero.
     DEBUG_LOG("Sending Ping Response.\n");
-    return connection->WriteAll(buffer, sizeof(buffer));
+    return connection->Write(buffer, sizeof(buffer));
   }
 };
 
@@ -538,7 +538,7 @@ public:
   void Dump() {
     static uint8_t buffer[1024];
     size_t to_read = bytes_remaining_;
-    ReadAll(buffer, to_read);
+    Read(buffer, to_read);
 
     LOG("--\n");
     for(int i = 0; i < to_read; i++) {
@@ -547,9 +547,9 @@ public:
     LOG("--\n");
   }
 
-  bool ReadAll(uint8_t* buffer, size_t size) {
+  bool Read(uint8_t* buffer, size_t size) {
     assert(size <= bytes_remaining_);
-    if (connection_.ReadAll(buffer, size)) {
+    if (connection_.Read(buffer, size)) {
       bytes_remaining_ -= size;
       return true;
     }
