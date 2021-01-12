@@ -91,7 +91,6 @@ public:
                 [target_key, conn = std::move(connection_heap)]
                 (typename DataStore::Key key, const DataStoreEntry& entry) mutable {
                   if (target_key == key) {
-                    LOG("Writing to client!\n");
                     proto3::Publish packet;
                     DataStore::DecodeKey(key, packet.topic.data, &packet.topic.length);
                     packet.payload_bytes = entry.length;
@@ -125,6 +124,7 @@ public:
         }
       } else if (packet->type() == PacketType::DISCONNECT) {
         LOG("Client disconnected..\n");
+        packet->connection()->Close();
       } else {
         LOG("Unsupported packet type: %u\n", (uint8_t)packet->type());
         return Status::Failure("Unsupported packet type.");
