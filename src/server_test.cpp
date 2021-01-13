@@ -232,9 +232,9 @@ TEST(ServerTest, SubscribePacket) {
 
     int topics = 0;
     std::string captured_topic;
-    auto topic_callback = [&](auto* topic) {
+    auto topic_callback = [&](const char* topic, size_t topic_length) {
       topics++;
-      captured_topic = std::string(topic->data, topic->length);
+      captured_topic = std::string(topic, topic_length);
       return true;
     };
 

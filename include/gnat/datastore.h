@@ -29,8 +29,11 @@ public:
     // Encode a string to this key type, this needs to be specialized below.
     static KeyType EncodeKey(const char* decoded, size_t bytes);
 
-    // Dencode a string from this key type, this needs to be specialized below.
+    // Decode a string from this key type, this needs to be specialized below.
     static void DecodeKey(const KeyType& key, char* encoded, uint16_t* bytes);
+
+    static std::function<bool(const KeyType& key)> FullKeyMatcher(const KeyType& key);
+    static std::function<bool(const KeyType& key)> PrefixKeyMatcher(const KeyType& key);
 
     using Key = KeyType;
 
@@ -75,6 +78,24 @@ void DataStore<uint64_t>::DecodeKey(const uint64_t& key, char* decoded, uint16_t
 }
 
 template<>
+std::function<bool(const uint64_t&)> DataStore<uint64_t>::FullKeyMatcher(
+    const uint64_t& target_key) {
+  return [target_key](const uint64_t& other_key) {
+    return target_key == other_key;
+  };
+}
+
+template<>
+std::function<bool(const uint64_t&)> DataStore<uint64_t>::PrefixKeyMatcher(
+    const uint64_t& target_key) {
+  return [target_key](const uint64_t& other_key) {
+    // The parts of the target key that are not '0' are the prefix, after anding if
+    // the other key had the prefix we should be left with the target key.
+    return (target_key & other_key) == target_key;
+  };
+}
+
+template<>
 std::string DataStore<std::string>::EncodeKey(const char* decoded, size_t bytes) {
   return {decoded, bytes};
 }
@@ -86,5 +107,24 @@ void DataStore<std::string>::DecodeKey(const std::string& key, char* decoded, ui
   memcpy(decoded, key.c_str(), key.length());
   *bytes = key.length();
 }
+
+template<>
+std::function<bool(const std::string&)> DataStore<std::string>::FullKeyMatcher(
+    const std::string& target_key) {
+  return [target_key](const std::string& other_key) {
+    return target_key == other_key;
+  };
+}
+
+template<>
+std::function<bool(const std::string&)> DataStore<std::string>::PrefixKeyMatcher(
+    const std::string& target_key) {
+  return [target_key](const std::string& other_key) {
+    return std::equal(target_key.begin(),
+        target_key.begin() + std::min(target_key.size(), other_key.size()),
+        other_key.begin());
+  };
+}
+
 
 } // namespace gnat

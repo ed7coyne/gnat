@@ -83,14 +83,27 @@ public:
         const auto key = DataStore::EncodeKey(publish.topic.data, publish.topic.length);
         data_->Set(key, std::move(entry));
       } else if (packet->type() == PacketType::SUBSCRIBE) {
-        auto topic_callback = [&](auto* topic) {
+        auto topic_callback = [&](char* topic, size_t topic_length) {
             auto connection_heap = packet->connection()->CreateHeapCopy();
-            const auto target_key = DataStore::EncodeKey(topic->data, topic->length);
+
+            if (memchr(topic, '+', topic_length) != nullptr) {
+              LOG("Use of + wildcard in topics not supported.");
+              return false;
+            }
+
+            const bool is_prefix = (memchr(topic, '#', topic_length) != nullptr);
+
+            const auto target_key = DataStore::EncodeKey(
+                topic, (is_prefix) ? topic_length -1 : topic_length);
+
+            const auto key_matcher = is_prefix ?
+              DataStore::PrefixKeyMatcher(target_key) :
+              DataStore::FullKeyMatcher(target_key);
 
             data_->AddObserver(
-                [target_key, conn = std::move(connection_heap)]
+                [key_matcher, conn = std::move(connection_heap)]
                 (typename DataStore::Key key, const DataStoreEntry& entry) mutable {
-                  if (target_key == key) {
+                  if (key_matcher(key)) {
                     proto3::Publish packet;
                     DataStore::DecodeKey(key, packet.topic.data, &packet.topic.length);
                     packet.payload_bytes = entry.length;

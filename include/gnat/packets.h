@@ -379,7 +379,7 @@ struct Subscribe {
                 DEBUG_LOG("Failed to read topic.\n");
                 return {};
             }
-            if (!callback(&topic)) {
+            if (!callback(topic.data, topic.length)) {
                 return {};
             }
 
