@@ -87,6 +87,8 @@ struct BufferConnection {
       return true;
     }
 
+    void Close() {}
+
     BufferConnection CreateHeapCopy() {
         return BufferConnection(out_buffer_ + out_position_, out_size_ - out_position_,
                                 in_buffer_);
