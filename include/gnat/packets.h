@@ -329,8 +329,17 @@ struct Publish {
     buffer[current_byte++] =
         (((uint8_t)PacketType::PUBLISH << 4) & 0xF0) | (flags & 0xF);
 
-    //TODO: handle over 128 bytes!
-    auto* packet_length = &buffer[current_byte++];
+    // We pre-calculate the length here in order to do variable encoding.
+    // Unlike other packets this one can easily be over 127 bytes long.
+    int length = 2 /* topic length storage */ + topic.length + payload_bytes;
+    while (length > 0) {
+      if (length > 127) {
+        buffer[current_byte++] = (length % 128) | 128;
+      } else {
+        buffer[current_byte++] = length;
+      }
+      length = length / 128;
+    }
 
     buffer[current_byte++] = 0;
     buffer[current_byte++] = topic.length;
@@ -339,9 +348,6 @@ struct Publish {
 
     assert(current_byte < kBufferSize);
     const auto header_size = current_byte;
-
-    const auto packet_size = header_size + payload_bytes;
-    *packet_length = packet_size - 2; // remove fixed header from size.
 
     // Write buffered data.
     if (!connection->WritePartial(buffer, header_size)) return false;
@@ -412,6 +418,9 @@ struct Subscribe {
       buffer[current_byte++] = 0;
 
       *remaining_length = current_byte - 2; // remove common header bytes.
+
+      // If it is greater than 127 we need to use variable encoding on the length byte.
+      assert(*remaining_length < 127);
       return client->Write(buffer, current_byte);
     }
 
