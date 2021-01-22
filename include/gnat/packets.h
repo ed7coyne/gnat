@@ -321,7 +321,8 @@ struct Publish {
 
   template<typename ClientConnection>
   bool SendOn(ClientConnection* connection, uint8_t* payload) {
-    constexpr auto kBufferSize = 24;
+    // This buffer contains the topic as well which can be long.
+    constexpr auto kBufferSize = 256;
     static uint8_t buffer[kBufferSize] = {0};
 
     uint8_t current_byte = 0;
