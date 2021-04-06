@@ -83,6 +83,7 @@ public:
         const auto key = DataStore::EncodeKey(publish.topic.data, publish.topic.length);
         data_->Set(key, std::move(entry));
       } else if (packet->type() == PacketType::SUBSCRIBE) {
+        std::function<bool(const typename DataStore::Key&, const DataStoreEntry&)> observer;
         auto topic_callback = [&](char* topic, size_t topic_length) {
             auto connection_heap = packet->connection()->CreateHeapCopy();
 
@@ -100,7 +101,7 @@ public:
               DataStore::PrefixKeyMatcher(target_key) :
               DataStore::FullKeyMatcher(target_key);
 
-            data_->AddObserver(
+            observer =
                 [key_matcher, conn = std::move(connection_heap)]
                 (typename DataStore::Key key, const DataStoreEntry& entry) mutable {
                   if (key_matcher(key)) {
@@ -112,7 +113,7 @@ public:
                     }
                   }
                   return true;
-            });
+            };
             return true;
         };
 
@@ -129,6 +130,12 @@ public:
         if(!ack.SendOn(packet->connection())) {
           LOG("Failed to send response.\n");
           return Status::Failure("Unable to send response.");
+        }
+        if (observer) {
+          // Add the observer last, if subscribe failed we don't want it.
+          // We also don't want to send any data until the client has
+          // received the suback.
+          data_->AddObserver(observer);
         }
       } else if (packet->type() == PacketType::PINGREQ) {
         if (!proto3::PingResp::SendOn(packet->connection())) {

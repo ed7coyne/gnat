@@ -48,6 +48,10 @@ public:
     }
 
     void AddObserver(std::function<bool(const KeyType&, const DataStoreEntry&)> observer) {
+        // Send observer all existing data so it can filter by matching topics.
+        for (const auto& [key, entry] : entries_) {
+          observer(key, entry);
+        }
         observers_.emplace_back(std::move(observer));
     }
 
