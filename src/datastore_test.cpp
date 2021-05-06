@@ -42,13 +42,13 @@ TEST(DataStoreTest, Notify) {
 
     uint64_t notified_key = 0;
     std::vector<char> notified_data;
-    store.AddObserver([&notified_key, &notified_data](
+    store.AddObserver({0, [&notified_key, &notified_data](
                 uint64_t key, const gnat::DataStoreEntry& entry) {
         notified_key = key;
         notified_data.resize(entry.length);
         memcpy(notified_data.data(), entry.data.get(), entry.length);
         return true;
-    });
+    }});
 
     const std::string value("I'M A TEST!");
     store.Set(kKeyUint, ToEntry(value.c_str()));
@@ -66,13 +66,13 @@ TEST(DataStoreTest, NotifyString) {
 
     std::string notified_key;
     std::vector<char> notified_data;
-    store.AddObserver([&notified_key, &notified_data](
+    store.AddObserver({0, [&notified_key, &notified_data](
                 const std::string& key, const gnat::DataStoreEntry& entry) {
         notified_key = key;
         notified_data.resize(entry.length);
         memcpy(notified_data.data(), entry.data.get(), entry.length);
         return true;
-    });
+    }});
 
     const std::string value("I'M A TEST!");
     store.Set(kKey, ToEntry(value.c_str()));
@@ -90,11 +90,11 @@ TEST(DataStoreTest, RemoveFailedObserver) {
     gnat::DataStore<uint64_t> store;
 
     int notified_count = 0;
-    store.AddObserver(
+    store.AddObserver({0,
             [&notified_count](uint64_t, const gnat::DataStoreEntry&) {
                 notified_count++;
                 return false;
-            });
+            }});
     const std::string value("I'M A TEST!");
     store.Set(kKeyUint, ToEntry(value.c_str()));
     store.Set(kKeyUint, ToEntry("TEST2"));

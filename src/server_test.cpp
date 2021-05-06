@@ -87,6 +87,8 @@ struct BufferConnection {
       return true;
     }
 
+    uint32_t id() { return 0; }
+
     void Close() {}
 
     BufferConnection CreateHeapCopy() {

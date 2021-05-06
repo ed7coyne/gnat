@@ -135,7 +135,7 @@ public:
           // Add the observer last, if subscribe failed we don't want it.
           // We also don't want to send any data until the client has
           // received the suback.
-          data_->AddObserver(observer);
+          data_->AddObserver({.client_id = packet->connection()->id(), .handler = observer});
         }
       } else if (packet->type() == PacketType::PINGREQ) {
         if (!proto3::PingResp::SendOn(packet->connection())) {

@@ -100,7 +100,9 @@ public:
 
   gnat::ConnectionType connection_type() { return connection_type_; }
   void set_connection_type(gnat::ConnectionType type) { connection_type_ = type; }
-  
+
+  uint32_t id() { return client_->fd(); }
+
 private:
   WiFiClient* client_;
   std::shared_ptr<WiFiClient> owned_client_;

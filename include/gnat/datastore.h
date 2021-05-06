@@ -26,6 +26,11 @@ struct DataStoreEntry {
 template<typename KeyType>
 class DataStore {
 public:
+    struct ObserverEntry {
+      uint32_t client_id = 0;
+      std::function<bool(const KeyType&, const DataStoreEntry&)> handler;
+    };
+
     // Encode a string to this key type, this needs to be specialized below.
     static KeyType EncodeKey(const char* decoded, size_t bytes);
 
@@ -47,12 +52,24 @@ public:
         return entries_.at(key);
     }
 
-    void AddObserver(std::function<bool(const KeyType&, const DataStoreEntry&)> observer) {
+    void RemoveObserversForClient(uint32_t client_id) {
+      for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
+          auto& observer = *iter;
+          if (observer.client_id == client_id) {
+              iter--;
+              observers_.erase(std::next(iter));
+          }
+      }
+    }
+
+    void AddObserver(ObserverEntry observer) {
+        observers_.emplace_back(std::move(observer));
+
+        auto& handler = observers_.back().handler;
         // Send observer all existing data so it can filter by matching topics.
         for (const auto& [key, entry] : entries_) {
-          observer(key, entry);
+          handler(key, entry);
         }
-        observers_.emplace_back(std::move(observer));
     }
 
 private:
@@ -60,7 +77,7 @@ private:
         const auto& value = entries_[key];
         for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
             auto& observer = *iter;
-            if (!observer(key, value)) {
+            if (!observer.handler(key, value)) {
                 iter--;
                 observers_.erase(std::next(iter));
             }
@@ -68,7 +85,7 @@ private:
     }
 
    std::unordered_map<KeyType, DataStoreEntry> entries_;
-   std::list<std::function<bool(const KeyType&, const DataStoreEntry&)>> observers_;
+   std::list<ObserverEntry> observers_;
 };
 
 template<>
