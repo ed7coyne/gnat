@@ -56,8 +56,13 @@ public:
       for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
           auto& observer = *iter;
           if (observer.client_id == client_id) {
-              iter--;
-              observers_.erase(std::next(iter));
+                if (iter == observers_.begin()) {
+                  observers_.pop_front();
+                  iter = observers_.begin();
+                } else {
+                  iter--;
+                  observers_.erase(std::next(iter));
+                }
           }
       }
     }
@@ -78,8 +83,13 @@ private:
         for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
             auto& observer = *iter;
             if (!observer.handler(key, value)) {
-                iter--;
-                observers_.erase(std::next(iter));
+                if (iter == observers_.begin()) {
+                  observers_.pop_front();
+                  iter = observers_.begin();
+                } else {
+                  iter--;
+                  observers_.erase(std::next(iter));
+                }
             }
         }
     }
