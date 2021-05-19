@@ -53,18 +53,9 @@ public:
     }
 
     void RemoveObserversForClient(uint32_t client_id) {
-      for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
-          auto& observer = *iter;
-          if (observer.client_id == client_id) {
-                if (iter == observers_.begin()) {
-                  observers_.pop_front();
-                  iter = observers_.begin();
-                } else {
-                  iter--;
-                  observers_.erase(std::next(iter));
-                }
-          }
-      }
+      observers_.remove_if([client_id](const ObserverEntry& observer) {
+        return observer.client_id == client_id;
+      });
     }
 
     void AddObserver(ObserverEntry observer) {
@@ -72,8 +63,8 @@ public:
 
         auto& handler = observers_.back().handler;
         // Send observer all existing data so it can filter by matching topics.
-        for (const auto& [key, entry] : entries_) {
-          handler(key, entry);
+        for (const auto& entry : entries_) {
+          handler(entry.first, entry.second);
         }
     }
 
@@ -82,15 +73,7 @@ private:
         const auto& value = entries_[key];
         for (auto iter = observers_.begin(); iter != observers_.end(); iter++) {
             auto& observer = *iter;
-            if (!observer.handler(key, value)) {
-                if (iter == observers_.begin()) {
-                  observers_.pop_front();
-                  iter = observers_.begin();
-                } else {
-                  iter--;
-                  observers_.erase(std::next(iter));
-                }
-            }
+            observer.handler(key, value);
         }
     }
 

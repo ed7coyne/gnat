@@ -84,20 +84,3 @@ TEST(DataStoreTest, NotifyString) {
     ASSERT_TRUE(value == notified_string)
         << "notified_data: " << notified_string << "\n";
 }
-
-
-TEST(DataStoreTest, RemoveFailedObserver) {
-    gnat::DataStore<uint64_t> store;
-
-    int notified_count = 0;
-    store.AddObserver({0,
-            [&notified_count](uint64_t, const gnat::DataStoreEntry&) {
-                notified_count++;
-                return false;
-            }});
-    const std::string value("I'M A TEST!");
-    store.Set(kKeyUint, ToEntry(value.c_str()));
-    store.Set(kKeyUint, ToEntry("TEST2"));
-
-    ASSERT_EQ(1, notified_count);
-}
