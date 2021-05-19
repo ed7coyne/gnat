@@ -37,6 +37,9 @@ void serial_printf(const char* format, ...) {
 
 #else // Not Arduino
 
+#include <cstdint>
+#include <cstdio>
+
 // Since this is currently only for tests log level is ignored and you get all the logs.
 
 #define LOG(...) printf(__VA_ARGS__);

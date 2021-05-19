@@ -44,7 +44,7 @@ struct BufferConnection {
         : out_buffer_(buffer), out_size_(size), in_buffer_(in_buffer) {}
 
     bool Read(uint8_t* to, size_t to_size) {
-        LOG("Reading: %u\n", to_size);
+        LOG("Reading: %zu\n", to_size);
         auto to_copy = std::min(to_size, out_size_ - out_position_);
         if (to_copy == 0) {
             LOG("Read past end!\n");

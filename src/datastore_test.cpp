@@ -24,7 +24,7 @@ TEST(DataStoreTest, StoreRetreive) {
     store.Set(kKeyUint, ToEntry(value.c_str()));
 
     const auto& entry = store.Get(kKeyUint);
-    ASSERT_TRUE(value == (char*)entry.data.get());
+    ASSERT_EQ(value, std::string((const char*)entry.data.get(), entry.length));
 }
 
 TEST(DataStoreTest, StoreRetreiveString) {
@@ -33,7 +33,7 @@ TEST(DataStoreTest, StoreRetreiveString) {
     store.Set(kKey, ToEntry(value.c_str()));
 
     const auto& entry = store.Get(kKey);
-    ASSERT_TRUE(value == (char*)entry.data.get());
+    ASSERT_EQ(value, std::string((const char*)entry.data.get(), entry.length));
 }
 
 
