@@ -1,15 +1,10 @@
 #pragma once
 
 #include <assert.h>
-//#include <optional>
 
-#include "optional.hpp"
+#include "optional_fill.h"
 #include "log.h"
 #include "key.h"
-
-namespace std {
-  using nonstd::optional;
-}
 
 namespace gnat {
 
@@ -243,7 +238,7 @@ static constexpr Connect kDefaultConnect{
 struct ConnectAck {
   using Flags = PacketField<1>;
   using ReturnCode = PacketField<1>;
-  
+
   template<typename Client>
   static std::optional<ConnectAck> ReadFrom(Client* client) {
     ConnectAck out;
@@ -255,11 +250,11 @@ struct ConnectAck {
     if (!ReadField<ReturnCode>(client, &out.return_code)) {
       DEBUG_LOG("Failed to read code.\n");
       return {};
-		}
+    }
 
     return out;
   }
-  
+
   template<typename Client>
   bool SendOn(Client* client) {
     static uint8_t buffer[128] = {0};
@@ -284,12 +279,12 @@ struct ConnectAck {
     return client->Write(buffer, packet_size);
   }
 
-	// Used when sending.
+  // Used when sending.
   bool error = false;
 
-	// Used when receiving.
-	uint8_t flags = 0;
-	uint8_t return_code = 0;
+  // Used when receiving.
+  uint8_t flags = 0;
+  uint8_t return_code = 0;
 };
 
 struct Publish {
@@ -433,7 +428,7 @@ struct Subscribe {
 struct SubscribeAck {
   using PacketId = PacketField<2>;
   using Response = PacketField<1>;
-  
+
   uint16_t subscribe_packet_id = 0;
   uint8_t responses[32] = {0};
   uint8_t responses_count = 0;
@@ -446,15 +441,15 @@ struct SubscribeAck {
       return {};
     }
 
-		out.responses_count = 1;
+    out.responses_count = 1;
     if (!ReadField<Response>(client, &out.responses[0])) {
       DEBUG_LOG("Failed to read response.\n");
       return {};
-		}
+    }
 
     return out;
   }
-  
+
   template<typename ClientConnection>
   bool SendOn(ClientConnection* connection) {
     static uint8_t buffer[32] = {0};
