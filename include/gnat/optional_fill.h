@@ -3,12 +3,16 @@
 // This file exists to allow this library to easily run both where std::optional
 // is present and where it is not.
 
-#include <optional.hpp>
+#if __has_include(<optional> )
 
-#if !optional_USES_STD_OPTIONAL
+#include <optional>
+
+#else
+
+#include "./optional.hpp"
 
 namespace std {
-  using nonstd::optional;
+using nonstd::optional;
 }
 
-#endif // optional_USES_STD_OPTIONAL
+#endif  // has_include
