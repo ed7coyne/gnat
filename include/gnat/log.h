@@ -40,10 +40,25 @@ void serial_printf(const char* format, ...) {
 #include <cstdint>
 #include <cstdio>
 
-// Since this is currently only for tests log level is ignored and you get all the logs.
+#if GNAT_LOG_LEVEL > 0
 
 #define LOG(...) printf(__VA_ARGS__);
+
+#else 
+
+#define LOG(...)
+
+#endif
+
+#if GNAT_LOG_LEVEL > 1
+
 #define DEBUG_LOG(...) printf(__VA_ARGS__)
+
+#else
+
+#define DEBUG_LOG(...)
+
+#endif
 
 #endif
 

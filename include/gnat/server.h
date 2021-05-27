@@ -76,7 +76,7 @@ public:
         entry.length = publish.payload_bytes;
         entry.data = std::unique_ptr<uint8_t[]>(new uint8_t[entry.length]);
         if (!packet->Read(entry.data.get(), entry.length)) {
-          LOG("Failed to read publish. Size: %lu \n", entry.length);
+          LOG("Failed to read publish. Size: %u \n", entry.length);
           return Status::Failure("Unable to complete read.");
         }
         DEBUG_LOG("Read publish.\n");
